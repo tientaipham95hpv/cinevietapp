@@ -9,9 +9,6 @@ workflows:
       cocoapods: default
       groups:
         - app_store_connect
-      ios_signing:
-        distribution_type: development
-        bundle_identifier: live.cineviet.cinevietios
       vars:
         BUNDLE_ID: "live.cineviet.cinevietios"
     scripts:
@@ -24,17 +21,20 @@ workflows:
           cd ios
           pod install --repo-update
           cd ..
-      - name: Set up code signing
+      - name: Build unsigned iOS app
         script: |
-          xcode-project use-profiles
-      - name: Build signed IPA
+          flutter build ios --release --no-codesign
+      - name: Package unsigned IPA for ESign
         script: |
-          flutter build ipa --release \
-            --export-options-plist=/Users/builder/export_options.plist
+          rm -rf build/ios/unsigned_ipa
+          mkdir -p build/ios/unsigned_ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/unsigned_ipa/Payload/
+          cd build/ios/unsigned_ipa
+          zip -yr CineViet-unsigned.ipa Payload
     artifacts:
-      - build/ios/ipa/*.ipa
+      - build/ios/unsigned_ipa/CineViet-unsigned.ipa
+      - build/ios/iphoneos/Runner.app
       - /tmp/xcodebuild_logs/*.log
-      - flutter_drive.log
     publishing:
       email:
         recipients:
