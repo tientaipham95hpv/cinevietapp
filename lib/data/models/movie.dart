@@ -130,9 +130,14 @@ class Movie {
   final List<EpisodeServer> episodes;
   final List<Movie> related;
 
-  String? get posterUrl => poster?.isNotEmpty == true ? poster : thumbnail;
-  String? get backdropUrl =>
-      backdrop?.isNotEmpty == true ? backdrop : thumbnail;
+  String? get posterUrl => poster?.isNotEmpty == true
+      ? poster
+      : (thumbnail?.isNotEmpty == true ? thumbnail : backdrop);
+  String? get backdropUrl => backdrop?.isNotEmpty == true
+      ? backdrop
+      : (thumbnail?.isNotEmpty == true ? thumbnail : poster);
+  String? get portraitImageUrl => posterUrl;
+  String? get landscapeImageUrl => backdropUrl;
   String get metaLine => [
     if (releaseYear != null) '$releaseYear',
     if ((quality ?? '').isNotEmpty) quality!,

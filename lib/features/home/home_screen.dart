@@ -317,8 +317,8 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
     final safeIndex = _index.clamp(0, items.length - 1);
     final movie = items[safeIndex];
     final image = widget.platform.isMobile
-        ? (movie.posterUrl ?? movie.backdropUrl)
-        : (movie.backdropUrl ?? movie.posterUrl);
+        ? movie.portraitImageUrl
+        : movie.landscapeImageUrl;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -347,6 +347,9 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                       CachedNetworkImage(
                         imageUrl: image,
                         fit: BoxFit.cover,
+                        alignment: widget.platform.isMobile
+                            ? Alignment.topCenter
+                            : Alignment.center,
                         placeholder: (context, url) =>
                             const ColoredBox(color: CineVietColors.bg3),
                         errorWidget: (context, url, error) =>
@@ -596,26 +599,22 @@ class _HeroButton extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) => TvFocus(
-    onTap: () => _openMovie(context, movie),
-    borderRadius: BorderRadius.circular(CineVietRadius.full),
-    child: FilledButton.icon(
-      style: FilledButton.styleFrom(
-        backgroundColor: CineVietColors.accent,
-        foregroundColor: CineVietColors.bg,
-        padding: const EdgeInsets.symmetric(
-          horizontal: CineVietSpacing.lg,
-          vertical: CineVietSpacing.md,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(CineVietRadius.full),
-          side: BorderSide(color: CineVietColors.accent),
-        ),
+  Widget build(BuildContext context) => FilledButton.icon(
+    style: FilledButton.styleFrom(
+      backgroundColor: CineVietColors.accent,
+      foregroundColor: CineVietColors.bg,
+      padding: const EdgeInsets.symmetric(
+        horizontal: CineVietSpacing.lg,
+        vertical: CineVietSpacing.md,
       ),
-      onPressed: () => _openMovie(context, movie),
-      icon: Icon(icon),
-      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(CineVietRadius.full),
+        side: BorderSide(color: CineVietColors.accent),
+      ),
     ),
+    onPressed: () => _openMovie(context, movie),
+    icon: Icon(icon),
+    label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
   );
 }
 

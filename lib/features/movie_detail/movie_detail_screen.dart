@@ -212,10 +212,11 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (movie.backdropUrl != null)
+                if (movie.portraitImageUrl != null)
                   CachedNetworkImage(
-                    imageUrl: movie.backdropUrl!,
+                    imageUrl: movie.portraitImageUrl!,
                     fit: BoxFit.cover,
+                    alignment: Alignment.topCenter,
                     placeholder: (context, url) =>
                         const ColoredBox(color: CineVietColors.bg3),
                     errorWidget: (context, url, error) =>
@@ -313,9 +314,13 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                                 ),
                               ),
                               const SizedBox(height: CineVietSpacing.lg),
-                              Wrap(
-                                spacing: CineVietSpacing.sm,
-                                runSpacing: CineVietSpacing.sm,
+                              GridView.count(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                crossAxisCount: platform.isMobile ? 2 : 4,
+                                mainAxisSpacing: CineVietSpacing.sm,
+                                crossAxisSpacing: CineVietSpacing.sm,
+                                childAspectRatio: platform.isMobile ? 3.2 : 3.6,
                                 children: [
                                   FilledButton.icon(
                                     onPressed:

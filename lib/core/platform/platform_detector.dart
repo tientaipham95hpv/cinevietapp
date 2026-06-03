@@ -40,9 +40,9 @@ class PlatformDetector {
     if (!kIsWeb &&
         (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       type = CineVietPlatform.desktop;
-    } else if (shortest >= 600 ||
-        (!kIsWeb && Platform.isIOS && shortest >= 370)) {
+    } else if (shortest >= 600) {
       // Netflix-style touch family: tablets stay tablet/touch-first.
+      // Keep iPhone Plus/Max (390-430dp shortest side) as mobile; iPads are 600dp+.
       // Never classify 600dp+ touch tablets as TV from size alone.
       type = CineVietPlatform.tablet;
     } else if (!kIsWeb &&
