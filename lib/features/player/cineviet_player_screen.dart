@@ -541,6 +541,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
           onPanUpdate: _onPanUpdate,
           onPanEnd: _onPanEnd,
           onDoubleTapDown: (details) {
+            if (_controlsLocked) return;
             final width = MediaQuery.of(context).size.width;
             _seekBy(
               Duration(
@@ -741,23 +742,23 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   Widget _buildLockedButton() => SafeArea(
     child: Align(
-      alignment: Alignment.centerRight,
+      alignment: Alignment.topRight,
       child: Padding(
-        padding: const EdgeInsets.all(CineVietSpacing.lg),
+        padding: const EdgeInsets.all(14),
         child: TvFocus(
           onTap: _toggleLock,
           borderRadius: BorderRadius.circular(CineVietRadius.full),
-          child: FilledButton.icon(
+          child: IconButton.filledTonal(
             onPressed: _toggleLock,
+            tooltip: 'Mở khoá',
             icon: const Icon(Icons.lock_open_rounded),
-            label: const Text('Mở khoá'),
-            style: FilledButton.styleFrom(
+            style: IconButton.styleFrom(
               backgroundColor: Colors.black.withValues(alpha: 0.62),
               foregroundColor: CineVietColors.accent,
               side: BorderSide(
                 color: CineVietColors.accent.withValues(alpha: 0.55),
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              minimumSize: const Size.square(46),
             ),
           ),
         ),
@@ -811,6 +812,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                       ? 'Tiếp tục từ ${_fmt(_resumeItem!.position)}'
                       : null,
                   onBack: () => Navigator.of(context).maybePop(),
+                  onLock: _toggleLock,
                 ),
                 const Spacer(),
                 _buildControls(),
@@ -892,12 +894,18 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-              Center(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width - 56,
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      _PlayerRoundButton(
+                        icon: Icons.playlist_play_rounded,
+                        label: 'Server / Tập',
+                        onTap: () => _showServerEpisodeSheet(),
+                      ),
+                      const Spacer(),
                       _PlayerRoundButton(
                         icon: Icons.skip_previous_rounded,
                         label: 'Tập trước',
@@ -931,27 +939,13 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                         label: 'Tập sau',
                         onTap: _playNextEpisode,
                       ),
-                      const SizedBox(width: CineVietSpacing.sm),
-                      _PlayerRoundButton(
-                        icon: Icons.playlist_play_rounded,
-                        label: 'Server / Tập',
-                        onTap: () => _showServerEpisodeSheet(),
-                      ),
-                      const SizedBox(width: CineVietSpacing.sm),
+                      const Spacer(),
                       _PlayerRoundButton(
                         icon: _fitToScreen
                             ? Icons.fullscreen_exit_rounded
                             : Icons.fullscreen_rounded,
-                        label: _fitToScreen
-                            ? 'Vừa màn hình'
-                            : 'Phóng đầy màn hình',
+                        label: _fitToScreen ? 'Fit gốc' : 'Fit màn hình',
                         onTap: _toggleFullscreenFit,
-                      ),
-                      const SizedBox(width: CineVietSpacing.sm),
-                      _PlayerRoundButton(
-                        icon: Icons.lock_rounded,
-                        label: 'Khoá màn hình',
-                        onTap: _toggleLock,
                       ),
                     ],
                   ),
@@ -1116,6 +1110,7 @@ class _PlayerTopBar extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onBack,
+    required this.onLock,
     this.resumeText,
   });
 
@@ -1123,6 +1118,7 @@ class _PlayerTopBar extends StatelessWidget {
   final String subtitle;
   final String? resumeText;
   final VoidCallback onBack;
+  final VoidCallback onLock;
 
   @override
   Widget build(BuildContext context) {
@@ -1186,6 +1182,16 @@ class _PlayerTopBar extends StatelessWidget {
                   ],
                 ),
               ],
+            ),
+          ),
+          const SizedBox(width: CineVietSpacing.sm),
+          TvFocus(
+            onTap: onLock,
+            borderRadius: BorderRadius.circular(CineVietRadius.full),
+            child: IconButton.filledTonal(
+              onPressed: onLock,
+              tooltip: 'Khoá màn hình',
+              icon: const Icon(Icons.lock_rounded),
             ),
           ),
         ],
