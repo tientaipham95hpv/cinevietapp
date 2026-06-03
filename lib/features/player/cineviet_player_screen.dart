@@ -36,8 +36,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   String? _seekHint;
   String? _gestureMode;
   double? _gestureValue;
+  String? _dragMode;
   Offset? _dragStart;
   Duration? _dragStartPosition;
+  Duration? _pendingSeekPosition;
+  bool _switchingEpisode = false;
   double _appVolume = 1.0;
   double _screenBrightness = 0.5;
   Timer? _gestureHintTimer;
@@ -62,6 +65,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     ]);
     HardwareKeyboard.instance.addHandler(_handleRemoteKey);
     _loadScreenBrightness();
+    _loadSystemVolume();
     _initPlayer();
   }
 
@@ -140,13 +144,15 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
     _controller?.removeListener(_syncPlayerState);
     _controller?.dispose();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
+    if (!_switchingEpisode) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
     super.dispose();
   }
 
@@ -213,10 +219,28 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     } catch (_) {}
   }
 
-  void _showSeekHint(Duration delta) {
+  Future<void> _loadSystemVolume() async {
+    try {
+      final volume = await _brightnessChannel.invokeMethod<double>('getVolume');
+      if (mounted && volume != null) {
+        setState(() => _appVolume = volume.clamp(0.0, 1.0));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _setSystemVolume(double value) async {
+    try {
+      await _brightnessChannel.invokeMethod('setVolume', {'value': value});
+    } catch (_) {}
+  }
+
+  void _showSeekHint(Duration delta, {Duration? target}) {
     _seekHintTimer?.cancel();
-    setState(() => _seekHint = delta.isNegative ? '−10s' : '+10s');
-    _seekHintTimer = Timer(const Duration(milliseconds: 750), () {
+    final sign = delta.isNegative ? '−' : '+';
+    final seconds = delta.inSeconds.abs();
+    final text = target == null ? '$sign${seconds}s' : '$sign${seconds}s  •  ${_fmt(target)}';
+    setState(() => _seekHint = text);
+    _seekHintTimer = Timer(const Duration(milliseconds: 900), () {
       if (mounted) setState(() => _seekHint = null);
     });
   }
@@ -239,8 +263,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   void _onPanStart(DragStartDetails details) {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
+    _dragMode = null;
     _dragStart = details.localPosition;
     _dragStartPosition = controller.value.position;
+    _pendingSeekPosition = null;
     _gestureHintTimer?.cancel();
   }
 
@@ -257,15 +283,21 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final dx = details.localPosition.dx - start.dx;
     final dy = details.localPosition.dy - start.dy;
 
-    if (dx.abs() > dy.abs()) {
+    _dragMode ??= dx.abs() > 18 || dy.abs() > 18
+        ? (dx.abs() > dy.abs() ? 'seek' : 'level')
+        : null;
+    if (_dragMode == null) return;
+
+    if (_dragMode == 'seek') {
       final duration = controller.value.duration;
       if (duration.inMilliseconds <= 0) return;
       final startPosition = _dragStartPosition ?? controller.value.position;
-      final deltaSeconds = (dx / size.width * 90).round();
+      final deltaSeconds = (dx / size.width * 180).round();
       final targetMs = (startPosition.inMilliseconds + deltaSeconds * 1000)
           .clamp(0, duration.inMilliseconds);
-      controller.seekTo(Duration(milliseconds: targetMs));
-      _showSeekHint(Duration(seconds: deltaSeconds));
+      final target = Duration(milliseconds: targetMs);
+      _pendingSeekPosition = target;
+      _showSeekHint(Duration(seconds: deltaSeconds), target: target);
       return;
     }
 
@@ -284,15 +316,24 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       try {
         controller.setVolume(next);
       } catch (_) {}
+      _setSystemVolume(next);
       _showGestureHint('volume', next);
     }
     _dragStart = details.localPosition;
   }
 
   void _onPanEnd(DragEndDetails details) {
+    final target = _pendingSeekPosition;
+    if (_dragMode == 'seek' && target != null) {
+      try {
+        _controller?.seekTo(target);
+      } catch (_) {}
+      _saveProgress();
+    }
+    _dragMode = null;
     _dragStart = null;
     _dragStartPosition = null;
-    _saveProgress();
+    _pendingSeekPosition = null;
     _revealControls();
   }
 
@@ -398,6 +439,12 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     if (current < 0) return;
     final next = current + offset;
     if (next < 0 || next >= items.length) return;
+    _switchingEpisode = true;
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => CineVietPlayerScreen(
@@ -428,7 +475,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         backgroundColor: Colors.black,
         body: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: _revealControls,
+          onTap: () {
+            if (!mounted) return;
+            setState(() => _showControls = !_showControls);
+            if (_showControls) _armHideTimer();
+          },
           onPanStart: _onPanStart,
           onPanUpdate: _onPanUpdate,
           onPanEnd: _onPanEnd,
