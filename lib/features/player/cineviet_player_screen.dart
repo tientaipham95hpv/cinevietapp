@@ -41,8 +41,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   Duration? _dragStartPosition;
   Duration? _pendingSeekPosition;
   bool _switchingEpisode = false;
+  bool _controlsLocked = false;
+  bool _fitToScreen = false;
   double _appVolume = 1.0;
-  double _screenBrightness = 0.5;
+  double _screenBrightness = 1.0;
   Timer? _gestureHintTimer;
   Timer? _hideTimer;
   Timer? _progressTimer;
@@ -189,7 +191,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   void _revealControls() {
-    if (!mounted) return;
+    if (!mounted || _controlsLocked) return;
     setState(() => _showControls = true);
     _armHideTimer();
   }
@@ -214,7 +216,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     try {
       final brightness = await _brightnessChannel.invokeMethod<double>('get');
       if (mounted && brightness != null) {
-        setState(() => _screenBrightness = brightness.clamp(0.0, 1.0));
+        setState(() => _screenBrightness = brightness.clamp(0.05, 1.0));
       }
     } catch (_) {}
   }
@@ -269,6 +271,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   void _onPanStart(DragStartDetails details) {
+    if (_controlsLocked) return;
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     _dragMode = null;
@@ -279,6 +282,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   void _onPanUpdate(DragUpdateDetails details) {
+    if (_controlsLocked) return;
     final controller = _controller;
     final start = _dragStart;
     if (controller == null ||
@@ -312,13 +316,13 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final change = -dy / size.height * 1.35;
     final isLeft = start.dx < size.width / 2;
     if (isLeft) {
-      final next = (_screenBrightness + change).clamp(0.0, 1.0);
-      _screenBrightness = next;
+      final next = (_screenBrightness + change).clamp(0.05, 1.0);
+      setState(() => _screenBrightness = next);
       _setScreenBrightness(next);
       _showGestureHint('brightness', next);
     } else {
       final next = (_appVolume + change).clamp(0.0, 1.0);
-      _appVolume = next;
+      setState(() => _appVolume = next);
       try {
         controller.setVolume(next);
       } catch (_) {}
@@ -329,6 +333,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   void _onPanEnd(DragEndDetails details) {
+    if (_controlsLocked) return;
     final target = _pendingSeekPosition;
     if (_dragMode == 'seek' && target != null) {
       try {
@@ -380,6 +385,52 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     } catch (_) {
       // Progress persistence must never interrupt playback.
     }
+  }
+
+  void _toggleLock() {
+    if (!mounted) return;
+    setState(() {
+      _controlsLocked = !_controlsLocked;
+      _showControls = !_controlsLocked;
+    });
+    if (!_controlsLocked) _armHideTimer();
+  }
+
+  void _toggleFullscreenFit() {
+    if (!mounted) return;
+    setState(() => _fitToScreen = !_fitToScreen);
+    SystemChrome.setEnabledSystemUIMode(
+      _fitToScreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
+    _revealControls();
+  }
+
+  Future<void> _showServerEpisodeSheet() async {
+    if (_controlsLocked) return;
+    _revealControls();
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => _ServerEpisodeSheet(
+        movie: widget.movie,
+        currentServer: widget.server,
+        currentEpisode: widget.episode,
+        onSelect: (server, episode) {
+          _switchingEpisode = true;
+          Navigator.of(context).pop();
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => CineVietPlayerScreen(
+                movie: widget.movie,
+                server: server,
+                episode: episode,
+              ),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _togglePlay() {
@@ -482,7 +533,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         body: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () {
-            if (!mounted) return;
+            if (!mounted || _controlsLocked) return;
             setState(() => _showControls = !_showControls);
             if (_showControls) _armHideTimer();
           },
@@ -501,10 +552,20 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             fit: StackFit.expand,
             children: [
               _buildVideo(),
+              if (_screenBrightness < 0.99)
+                IgnorePointer(
+                  child: ColoredBox(
+                    color: Colors.black.withValues(
+                      alpha: (1 - _screenBrightness).clamp(0.0, 0.72),
+                    ),
+                  ),
+                ),
+              if (_controlsLocked) _buildLockedButton(),
               if (_gestureMode != null && _gestureValue != null)
                 _buildGestureHint(),
               if (_buffering && !_loading) _buildBufferingBadge(),
-              if (_showControls || _loading || _error != null)
+              if (!_controlsLocked &&
+                  (_showControls || _loading || _error != null))
                 _buildOverlay(context),
             ],
           ),
@@ -584,11 +645,24 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     if (controller == null || !controller.value.isInitialized) {
       return const SizedBox.shrink();
     }
+    final aspectRatio = controller.value.aspectRatio == 0
+        ? 16 / 9
+        : controller.value.aspectRatio;
+    if (_fitToScreen) {
+      return Center(
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: aspectRatio * 1000,
+            height: 1000,
+            child: VideoPlayer(controller),
+          ),
+        ),
+      );
+    }
     return Center(
       child: AspectRatio(
-        aspectRatio: controller.value.aspectRatio == 0
-            ? 16 / 9
-            : controller.value.aspectRatio,
+        aspectRatio: aspectRatio,
         child: VideoPlayer(controller),
       ),
     );
@@ -665,6 +739,32 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     );
   }
 
+  Widget _buildLockedButton() => SafeArea(
+    child: Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: const EdgeInsets.all(CineVietSpacing.lg),
+        child: TvFocus(
+          onTap: _toggleLock,
+          borderRadius: BorderRadius.circular(CineVietRadius.full),
+          child: FilledButton.icon(
+            onPressed: _toggleLock,
+            icon: const Icon(Icons.lock_open_rounded),
+            label: const Text('Mở khoá'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.black.withValues(alpha: 0.62),
+              foregroundColor: CineVietColors.accent,
+              side: BorderSide(
+                color: CineVietColors.accent.withValues(alpha: 0.55),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   Widget _buildBufferingBadge() => const Center(
     child: DecoratedBox(
       decoration: BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
@@ -736,15 +836,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             ? 0.0
             : position.inMilliseconds / duration.inMilliseconds;
         return Container(
-          padding: const EdgeInsets.fromLTRB(
-            CineVietSpacing.lg,
-            CineVietSpacing.md,
-            CineVietSpacing.lg,
-            CineVietSpacing.md,
-          ),
+          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.24),
-            borderRadius: BorderRadius.circular(CineVietRadius.xl),
+            color: Colors.black.withValues(alpha: 0.34),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             boxShadow: const [
               BoxShadow(
@@ -796,51 +891,222 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: CineVietSpacing.xs),
+              const SizedBox(height: 6),
               Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _PlayerRoundButton(
-                      icon: Icons.skip_previous_rounded,
-                      label: 'Tập trước',
-                      onTap: _playPreviousEpisode,
-                    ),
-                    const SizedBox(width: CineVietSpacing.sm),
-                    _PlayerRoundButton(
-                      icon: Icons.replay_10_rounded,
-                      label: 'Lùi 10s',
-                      onTap: () => _seekBy(const Duration(seconds: -10)),
-                    ),
-                    const SizedBox(width: CineVietSpacing.sm),
-                    _PlayerRoundButton(
-                      icon: value.isPlaying
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                      label: value.isPlaying ? 'Tạm dừng' : 'Phát',
-                      primary: true,
-                      large: true,
-                      onTap: _togglePlay,
-                    ),
-                    const SizedBox(width: CineVietSpacing.sm),
-                    _PlayerRoundButton(
-                      icon: Icons.forward_10_rounded,
-                      label: 'Tới 10s',
-                      onTap: () => _seekBy(const Duration(seconds: 10)),
-                    ),
-                    const SizedBox(width: CineVietSpacing.sm),
-                    _PlayerRoundButton(
-                      icon: Icons.skip_next_rounded,
-                      label: 'Tập sau',
-                      onTap: _playNextEpisode,
-                    ),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PlayerRoundButton(
+                        icon: Icons.skip_previous_rounded,
+                        label: 'Tập trước',
+                        onTap: _playPreviousEpisode,
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
+                      _PlayerRoundButton(
+                        icon: Icons.replay_10_rounded,
+                        label: 'Lùi 10s',
+                        onTap: () => _seekBy(const Duration(seconds: -10)),
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
+                      _PlayerRoundButton(
+                        icon: value.isPlaying
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                        label: value.isPlaying ? 'Tạm dừng' : 'Phát',
+                        primary: true,
+                        large: true,
+                        onTap: _togglePlay,
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
+                      _PlayerRoundButton(
+                        icon: Icons.forward_10_rounded,
+                        label: 'Tới 10s',
+                        onTap: () => _seekBy(const Duration(seconds: 10)),
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
+                      _PlayerRoundButton(
+                        icon: Icons.skip_next_rounded,
+                        label: 'Tập sau',
+                        onTap: _playNextEpisode,
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
+                      _PlayerRoundButton(
+                        icon: Icons.playlist_play_rounded,
+                        label: 'Server / Tập',
+                        onTap: () => _showServerEpisodeSheet(),
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
+                      _PlayerRoundButton(
+                        icon: _fitToScreen
+                            ? Icons.fullscreen_exit_rounded
+                            : Icons.fullscreen_rounded,
+                        label: _fitToScreen
+                            ? 'Vừa màn hình'
+                            : 'Phóng đầy màn hình',
+                        onTap: _toggleFullscreenFit,
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
+                      _PlayerRoundButton(
+                        icon: Icons.lock_rounded,
+                        label: 'Khoá màn hình',
+                        onTap: _toggleLock,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _ServerEpisodeSheet extends StatelessWidget {
+  const _ServerEpisodeSheet({
+    required this.movie,
+    required this.currentServer,
+    required this.currentEpisode,
+    required this.onSelect,
+  });
+
+  final Movie movie;
+  final EpisodeServer currentServer;
+  final EpisodeItem currentEpisode;
+  final void Function(EpisodeServer server, EpisodeItem episode) onSelect;
+
+  bool _isCurrent(EpisodeServer server, EpisodeItem episode) {
+    return server.name == currentServer.name &&
+        episode.name == currentEpisode.name &&
+        episode.linkM3u8 == currentEpisode.linkM3u8 &&
+        episode.linkEmbed == currentEpisode.linkEmbed;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final servers = movie.episodes;
+    return SafeArea(
+      top: false,
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.72,
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        decoration: BoxDecoration(
+          color: CineVietColors.bg.withValues(alpha: 0.96),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Server & danh sách tập',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.separated(
+                itemCount: servers.length,
+                separatorBuilder: (_, index) => const SizedBox(height: 16),
+                itemBuilder: (context, serverIndex) {
+                  final server = servers[serverIndex];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        server.displayName,
+                        style: const TextStyle(
+                          color: CineVietColors.accent,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final episode in server.items)
+                            _EpisodeChip(
+                              label: episode.displayName,
+                              selected: _isCurrent(server, episode),
+                              onTap: () => onSelect(server, episode),
+                            ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _EpisodeChip extends StatelessWidget {
+  const _EpisodeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocus(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(CineVietRadius.full),
+      child: InkWell(
+        onTap: selected ? null : onTap,
+        borderRadius: BorderRadius.circular(CineVietRadius.full),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected
+                ? CineVietColors.accent
+                : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(CineVietRadius.full),
+            border: Border.all(
+              color: selected
+                  ? CineVietColors.accent
+                  : Colors.white.withValues(alpha: 0.14),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? const Color(0xFF061A13) : Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

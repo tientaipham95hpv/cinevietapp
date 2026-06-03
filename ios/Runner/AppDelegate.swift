@@ -30,7 +30,13 @@ import UIKit
       volumeView.isUserInteractionEnabled = false
       controller.view.addSubview(volumeView)
       volumeSlider = volumeView.subviews.compactMap { $0 as? UISlider }.first
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+        self?.volumeSlider = self?.volumeView.subviews.compactMap { $0 as? UISlider }.first
+      }
     }
+
+    try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
+    try? AVAudioSession.sharedInstance().setActive(true)
 
     let channel = FlutterMethodChannel(
       name: "live.cineviet/brightness",
@@ -71,7 +77,11 @@ import UIKit
     if volumeSlider == nil {
       volumeSlider = volumeView.subviews.compactMap { $0 as? UISlider }.first
     }
-    volumeSlider?.setValue(clamped, animated: false)
+    if volumeSlider == nil {
+      volumeView.layoutIfNeeded()
+      volumeSlider = volumeView.subviews.compactMap { $0 as? UISlider }.first
+    }
+    volumeSlider?.value = clamped
     volumeSlider?.sendActions(for: .valueChanged)
   }
 }
