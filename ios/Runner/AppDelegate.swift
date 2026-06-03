@@ -51,13 +51,13 @@ import UIKit
         case "set":
           let value = self?.doubleArg(call.arguments, key: "value", fallback: 0.5) ?? 0.5
           UIScreen.main.brightness = CGFloat(min(max(value, 0.0), 1.0))
-          result(nil)
+          result(Double(UIScreen.main.brightness))
         case "getVolume":
           result(Double(AVAudioSession.sharedInstance().outputVolume))
         case "setVolume":
           let value = self?.doubleArg(call.arguments, key: "value", fallback: 1.0) ?? 1.0
           self?.setSystemVolume(value)
-          result(nil)
+          result(Double(AVAudioSession.sharedInstance().outputVolume))
         default:
           result(FlutterMethodNotImplemented)
         }

@@ -2,6 +2,8 @@ package live.cineviet.cineviet_app
 
 import android.content.Context
 import android.media.AudioManager
+import android.os.Build
+import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -14,34 +16,62 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, brightnessChannel).setMethodCallHandler { call, result ->
             when (call.method) {
-                "get" -> {
-                    val value = window.attributes.screenBrightness
-                    result.success(if (value >= 0f) value.toDouble() else 0.5)
-                }
+                "get" -> result.success(currentBrightness())
                 "set" -> {
-                    val value = (call.argument<Double>("value") ?: 0.5).coerceIn(0.0, 1.0).toFloat()
-                    val params = window.attributes
-                    params.screenBrightness = value
-                    window.attributes = params
-                    window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-                    result.success(null)
+                    val value = (call.argument<Double>("value") ?: 0.5).coerceIn(0.0, 1.0)
+                    applyBrightness(value)
+                    result.success(currentBrightness())
                 }
-                "getVolume" -> {
-                    val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                    val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-                    val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-                    result.success(current.toDouble() / max.toDouble())
-                }
+                "getVolume" -> result.success(currentMusicVolume())
                 "setVolume" -> {
                     val value = (call.argument<Double>("value") ?: 1.0).coerceIn(0.0, 1.0)
                     val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-                    val target = (value * max).toInt().coerceIn(0, max)
+                    val target = Math.round((value * max).toFloat()).coerceIn(0, max)
                     audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
-                    result.success(null)
+                    result.success(currentMusicVolume())
                 }
                 else -> result.notImplemented()
             }
         }
+    }
+
+    private fun currentBrightness(): Double {
+        val windowValue = window.attributes.screenBrightness
+        if (windowValue >= 0f) return windowValue.toDouble().coerceIn(0.0, 1.0)
+        return try {
+            Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS).toDouble()
+                .div(255.0)
+                .coerceIn(0.0, 1.0)
+        } catch (_: Exception) {
+            0.5
+        }
+    }
+
+    private fun applyBrightness(value: Double) {
+        val clamped = value.coerceIn(0.0, 1.0).toFloat()
+        val params = window.attributes
+        params.screenBrightness = clamped
+        window.attributes = params
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(this)) {
+                Settings.System.putInt(
+                    contentResolver,
+                    Settings.System.SCREEN_BRIGHTNESS,
+                    Math.round(clamped * 255).coerceIn(0, 255)
+                )
+            }
+        } catch (_: Exception) {
+            // Without WRITE_SETTINGS grant Android still applies per-window brightness.
+        }
+    }
+
+    private fun currentMusicVolume(): Double {
+        val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        return current.toDouble() / max.toDouble()
     }
 }

@@ -221,10 +221,15 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     } catch (_) {}
   }
 
-  Future<void> _setScreenBrightness(double value) async {
+  Future<double?> _setScreenBrightness(double value) async {
     try {
-      await _brightnessChannel.invokeMethod('set', {'value': value});
-    } catch (_) {}
+      final actual = await _brightnessChannel.invokeMethod<double>('set', {
+        'value': value,
+      });
+      return actual?.clamp(0.05, 1.0);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _loadSystemVolume() async {
@@ -236,10 +241,16 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     } catch (_) {}
   }
 
-  Future<void> _setSystemVolume(double value) async {
+  Future<double?> _setSystemVolume(double value) async {
     try {
-      await _brightnessChannel.invokeMethod('setVolume', {'value': value});
-    } catch (_) {}
+      final actual = await _brightnessChannel.invokeMethod<double>(
+        'setVolume',
+        {'value': value},
+      );
+      return actual?.clamp(0.0, 1.0);
+    } catch (_) {
+      return null;
+    }
   }
 
   void _showSeekHint(Duration delta, {Duration? target}) {
@@ -318,7 +329,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     if (isLeft) {
       final next = (_screenBrightness + change).clamp(0.05, 1.0);
       setState(() => _screenBrightness = next);
-      _setScreenBrightness(next);
+      _setScreenBrightness(next).then((actual) {
+        if (!mounted || actual == null) return;
+        setState(() => _screenBrightness = actual);
+      });
       _showGestureHint('brightness', next);
     } else {
       final next = (_appVolume + change).clamp(0.0, 1.0);
@@ -326,7 +340,13 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       try {
         controller.setVolume(next);
       } catch (_) {}
-      _setSystemVolume(next);
+      _setSystemVolume(next).then((actual) {
+        if (!mounted || actual == null) return;
+        setState(() => _appVolume = actual);
+        try {
+          controller.setVolume(actual);
+        } catch (_) {}
+      });
       _showGestureHint('volume', next);
     }
     _dragStart = details.localPosition;
