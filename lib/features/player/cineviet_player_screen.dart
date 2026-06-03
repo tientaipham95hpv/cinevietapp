@@ -219,6 +219,12 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     } catch (_) {}
   }
 
+  Future<void> _setScreenBrightness(double value) async {
+    try {
+      await _brightnessChannel.invokeMethod('set', {'value': value});
+    } catch (_) {}
+  }
+
   Future<void> _loadSystemVolume() async {
     try {
       final volume = await _brightnessChannel.invokeMethod<double>('getVolume');
@@ -238,7 +244,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _seekHintTimer?.cancel();
     final sign = delta.isNegative ? '−' : '+';
     final seconds = delta.inSeconds.abs();
-    final text = target == null ? '$sign${seconds}s' : '$sign${seconds}s  •  ${_fmt(target)}';
+    final text = target == null
+        ? '$sign${seconds}s'
+        : '$sign${seconds}s  •  ${_fmt(target)}';
     setState(() => _seekHint = text);
     _seekHintTimer = Timer(const Duration(milliseconds: 900), () {
       if (mounted) setState(() => _seekHint = null);
@@ -301,14 +309,12 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       return;
     }
 
-    final change = -dy / size.height;
+    final change = -dy / size.height * 1.35;
     final isLeft = start.dx < size.width / 2;
     if (isLeft) {
       final next = (_screenBrightness + change).clamp(0.0, 1.0);
       _screenBrightness = next;
-      try {
-        _brightnessChannel.invokeMethod('set', {'value': next});
-      } catch (_) {}
+      _setScreenBrightness(next);
       _showGestureHint('brightness', next);
     } else {
       final next = (_appVolume + change).clamp(0.0, 1.0);
