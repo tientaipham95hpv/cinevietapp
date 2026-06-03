@@ -2,6 +2,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player_media_kit/video_player_media_kit.dart';
 import 'core/services/desktop_oauth_service.dart';
 import 'core/theme/cineviet_theme.dart';
 import 'core/widgets/adaptive_scaffold.dart';
@@ -15,6 +16,7 @@ import 'features/history/history_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  VideoPlayerMediaKit.ensureInitialized(windows: true);
   try {
     await Firebase.initializeApp();
     await FirebaseAnalytics.instance.logAppOpen();
