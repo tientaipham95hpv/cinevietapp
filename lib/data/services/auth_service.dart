@@ -14,6 +14,8 @@ const _googleServerClientId =
     '511689034636-c7127b68vmqibg1t2jab2t7mek8mq1mt.apps.googleusercontent.com';
 const _tokenKey = 'cineviet_access_token';
 const _refreshKey = 'cineviet_refresh_token';
+const _rememberLoginKey = 'cineviet_remember_login';
+const _rememberEmailKey = 'cineviet_remember_email';
 
 class AuthState {
   const AuthState({this.user, this.loading = false, this.error});
@@ -131,6 +133,16 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> _setRememberPreference(bool remember, String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_rememberLoginKey, remember);
+    if (remember) {
+      await prefs.setString(_rememberEmailKey, email.trim());
+    } else {
+      await prefs.remove(_rememberEmailKey);
+    }
+  }
+
   Future<void> _saveSession(Map<String, dynamic> data) async {
     final token = '${data['accessToken'] ?? data['token'] ?? ''}';
     final refresh = '${data['refreshToken'] ?? ''}';
@@ -185,15 +197,25 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  Future<void> login(String email, String password) async {
+  Future<void> login(
+    String email,
+    String password, {
+    bool remember = true,
+  }) async {
     state = state.copyWith(loading: true, clearError: true);
     try {
+      final normalizedEmail = email.trim();
       final res = await _api.dio.post(
         '/auth/login',
-        data: {'email': email.trim(), 'password': password, 'remember': true},
+        data: {
+          'email': normalizedEmail,
+          'password': password,
+          'remember': remember,
+        },
         options: Options(headers: {'X-Mobile-Key': _mobileKey}),
       );
       await _saveSession(Map<String, dynamic>.from(res.data as Map));
+      await _setRememberPreference(remember, normalizedEmail);
     } catch (e) {
       state = state.copyWith(loading: false, error: _message(e));
     }

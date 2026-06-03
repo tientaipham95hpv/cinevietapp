@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/platform/platform_detector.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
@@ -23,10 +24,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   final _tvApproveCode = TextEditingController();
   bool _register = false;
   bool _registerOtpStep = false;
+  bool _rememberLogin = true;
   String _registerVerifyToken = '';
   String _registerVerifyEmail = '';
   bool _approvingTvCode = false;
   String? _tvApproveError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberLogin();
+  }
+
+  Future<void> _loadRememberLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _rememberLogin = prefs.getBool('cineviet_remember_login') ?? true;
+      if (_rememberLogin && _email.text.isEmpty) {
+        _email.text = prefs.getString('cineviet_remember_email') ?? '';
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -267,6 +286,42 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 prefixIcon: Icon(Icons.lock_rounded),
               ),
             ),
+            if (!_register) ...[
+              const SizedBox(height: CineVietSpacing.sm),
+              InkWell(
+                borderRadius: BorderRadius.circular(CineVietRadius.md),
+                onTap: auth.loading
+                    ? null
+                    : () => setState(() => _rememberLogin = !_rememberLogin),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberLogin,
+                        onChanged: auth.loading
+                            ? null
+                            : (value) => setState(
+                                () => _rememberLogin = value ?? true,
+                              ),
+                        activeColor: CineVietColors.accent,
+                        checkColor: Colors.black,
+                      ),
+                      const SizedBox(width: CineVietSpacing.xs),
+                      const Expanded(
+                        child: Text(
+                          'Ghi nhớ tài khoản',
+                          style: TextStyle(
+                            color: CineVietColors.text,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
           if (auth.error != null) ...[
             const SizedBox(height: CineVietSpacing.md),
@@ -626,7 +681,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
       }
     } else {
-      await c.login(_email.text, _password.text);
+      await c.login(_email.text, _password.text, remember: _rememberLogin);
     }
   }
 
