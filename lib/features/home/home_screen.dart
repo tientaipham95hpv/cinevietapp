@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -870,6 +871,20 @@ class _RealMovieCard extends StatelessWidget {
   );
 }
 
+List<WatchHistoryItem> _latestEpisodePerMovie(List<WatchHistoryItem> items) {
+  final latestByMovie = <String, WatchHistoryItem>{};
+  for (final item in items) {
+    final key = item.slug.isNotEmpty ? item.slug : item.movieId.toString();
+    final current = latestByMovie[key];
+    if (current == null || item.updatedAtMs > current.updatedAtMs) {
+      latestByMovie[key] = item;
+    }
+  }
+  final result = latestByMovie.values.toList()
+    ..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
+  return result;
+}
+
 class _ContinueWatchingSection extends StatelessWidget {
   const _ContinueWatchingSection({
     required this.data,
@@ -885,10 +900,13 @@ class _ContinueWatchingSection extends StatelessWidget {
     loading: () => const SizedBox.shrink(),
     error: (error, stackTrace) => const SizedBox.shrink(),
     data: (items) {
-      final filtered = items
-          .where((e) => !e.completed && e.progress > 0.02)
-          .toList();
-      if (filtered.isEmpty) return const SizedBox.shrink();
+      final filtered =
+          items.where((e) => !e.completed && e.progress > 0.02).toList()
+            ..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
+      final displayItems = defaultTargetPlatform == TargetPlatform.iOS
+          ? _latestEpisodePerMovie(filtered)
+          : filtered;
+      if (displayItems.isEmpty) return const SizedBox.shrink();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -901,11 +919,11 @@ class _ContinueWatchingSection extends StatelessWidget {
             height: platform.isMobile ? 136 : 152,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: filtered.length,
+              itemCount: displayItems.length,
               separatorBuilder: (context, index) =>
                   const SizedBox(width: CineVietSpacing.md),
               itemBuilder: (context, index) => _ContinueCard(
-                item: filtered[index],
+                item: displayItems[index],
                 width: platform.isMobile ? 260 : 330,
               ),
             ),
