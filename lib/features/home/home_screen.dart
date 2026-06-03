@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -903,9 +902,7 @@ class _ContinueWatchingSection extends StatelessWidget {
       final filtered =
           items.where((e) => !e.completed && e.progress > 0.02).toList()
             ..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
-      final displayItems = defaultTargetPlatform == TargetPlatform.iOS
-          ? _latestEpisodePerMovie(filtered)
-          : filtered;
+      final displayItems = _latestEpisodePerMovie(filtered);
       if (displayItems.isEmpty) return const SizedBox.shrink();
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
