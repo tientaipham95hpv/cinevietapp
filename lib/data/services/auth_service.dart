@@ -90,12 +90,59 @@ class TvLoginSession {
 
 class AuthController extends StateNotifier<AuthState> {
   AuthController(this.ref) : super(const AuthState(loading: true)) {
+    _installAuthInterceptor();
     _bootstrap();
   }
   final Ref ref;
+  Future<bool>? _refreshFuture;
 
   CineVietApi get _api => ref.read(cineVietApiProvider);
   FlutterSecureStorage get _storage => ref.read(secureStorageProvider);
+
+  void _installAuthInterceptor() {
+    _api.dio.interceptors.add(
+      QueuedInterceptorsWrapper(
+        onRequest: (options, handler) async {
+          final token = await _readToken(_tokenKey);
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+          handler.next(options);
+        },
+        onError: (error, handler) async {
+          final path = error.requestOptions.path;
+          final isAuthRefresh = path.contains('/auth/refresh');
+          final alreadyRetried =
+              error.requestOptions.extra['authRetried'] == true;
+          if (error.response?.statusCode != 401 ||
+              isAuthRefresh ||
+              alreadyRetried) {
+            handler.next(error);
+            return;
+          }
+
+          final ok = await _refreshOnce();
+          if (!ok) {
+            handler.next(error);
+            return;
+          }
+
+          try {
+            final token = await _readToken(_tokenKey);
+            final retryOptions = error.requestOptions;
+            retryOptions.extra['authRetried'] = true;
+            if (token != null && token.isNotEmpty) {
+              retryOptions.headers['Authorization'] = 'Bearer $token';
+            }
+            final response = await _api.dio.fetch<dynamic>(retryOptions);
+            handler.resolve(response);
+          } catch (e) {
+            handler.next(error);
+          }
+        },
+      ),
+    );
+  }
 
   Future<String?> _readToken(String key) async {
     final secureValue = await _storage.read(key: key);
@@ -124,8 +171,8 @@ class AuthController extends StateNotifier<AuthState> {
           user: AppUser.fromJson(Map<String, dynamic>.from(res.data as Map)),
         );
       } else {
-        await _clearTokens();
-        state = const AuthState();
+        final refreshed = await refresh();
+        if (!refreshed) state = const AuthState();
       }
     } catch (_) {
       final refreshed = await refresh();
@@ -159,6 +206,13 @@ class AuthController extends StateNotifier<AuthState> {
     state = AuthState(user: user);
   }
 
+  Future<bool> _refreshOnce() {
+    final running = _refreshFuture;
+    if (running != null) return running;
+    _refreshFuture = refresh().whenComplete(() => _refreshFuture = null);
+    return _refreshFuture!;
+  }
+
   Future<bool> refresh() async {
     try {
       final refreshToken = await _readToken(_refreshKey);
@@ -166,6 +220,7 @@ class AuthController extends StateNotifier<AuthState> {
       final res = await _api.dio.post(
         '/auth/refresh',
         data: {'refreshToken': refreshToken},
+        options: Options(headers: {'X-Mobile-Key': _mobileKey}),
       );
       await _saveSession(Map<String, dynamic>.from(res.data as Map));
       return true;
@@ -396,7 +451,10 @@ class AuthController extends StateNotifier<AuthState> {
         );
         return false;
       }
-      await loginWithToken(token);
+      await _saveSession(data);
+      if (!state.loggedIn) {
+        await loginWithToken(token);
+      }
       await _setRememberPreference(true, state.user?.email ?? '');
       return state.loggedIn;
     } catch (e) {
