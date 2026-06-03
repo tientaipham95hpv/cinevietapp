@@ -49,15 +49,20 @@ workflows:
     instance_type: windows_x2
     environment:
       flutter: stable
+      vars:
+        WINDOWS_ZIP_NAME: "CineViet-Windows-1.0.1.zip"
     scripts:
-      - name: Flutter get
-        script: flutter pub get
       - name: Enable Windows desktop
         script: flutter config --enable-windows-desktop
-      - name: Build Windows
-        script: flutter build windows --release
-      - name: Package Windows zip
-        script: powershell Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath cineviet-windows.zip -Force
+      - name: Flutter clean/get
+        script: |
+          flutter clean
+          flutter pub get
+      - name: Build Windows release
+        script: flutter build windows --release --build-name=1.0.1 --build-number=7054
+      - name: Package Windows portable zip
+        script: |
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "New-Item -ItemType Directory -Force build\windows\package | Out-Null; Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath build\windows\package\$env:WINDOWS_ZIP_NAME -Force"
     artifacts:
-      - cineviet-windows.zip
+      - build/windows/package/CineViet-Windows-1.0.1.zip
       - build/windows/x64/runner/Release/**
