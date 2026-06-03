@@ -370,6 +370,41 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> loginWithOAuthCallback(String callbackUrl) async {
+    state = state.copyWith(loading: true, clearError: true);
+    try {
+      final uri = Uri.parse(callbackUrl);
+      final code = uri.queryParameters['code'] ?? '';
+      if (code.isEmpty) {
+        state = state.copyWith(
+          loading: false,
+          error: 'Không nhận được mã đăng nhập Google.',
+        );
+        return false;
+      }
+      final res = await _api.dio.get(
+        '/auth/oauth-token',
+        queryParameters: {'code': code},
+        options: Options(headers: {'X-Mobile-Key': _mobileKey}),
+      );
+      final data = Map<String, dynamic>.from(res.data as Map);
+      final token = '${data['token'] ?? data['accessToken'] ?? ''}';
+      if (token.isEmpty) {
+        state = state.copyWith(
+          loading: false,
+          error: 'Không nhận được token Google.',
+        );
+        return false;
+      }
+      await loginWithToken(token);
+      await _setRememberPreference(true, state.user?.email ?? '');
+      return state.loggedIn;
+    } catch (e) {
+      state = state.copyWith(loading: false, error: _message(e));
+      return false;
+    }
+  }
+
   Future<void> _clearTokens() async {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _refreshKey);

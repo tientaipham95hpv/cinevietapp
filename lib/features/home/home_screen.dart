@@ -322,7 +322,10 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onHorizontalDragEnd: widget.platform.isMobile || widget.platform.isTablet
+      onHorizontalDragEnd:
+          widget.platform.isMobile ||
+              widget.platform.isTablet ||
+              widget.platform.isDesktop
           ? (details) {
               final velocity = details.primaryVelocity ?? 0;
               if (velocity < -160) _go(safeIndex + 1);
@@ -505,7 +508,7 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                   ),
                 ),
               ),
-              if (widget.platform.isTv || widget.platform.isDesktop)
+              if (widget.platform.isTv)
                 Positioned(
                   right: widget.platform.isMobile
                       ? CineVietSpacing.md

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/platform/platform_detector.dart';
+import '../../core/services/desktop_oauth_service.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
 import '../../data/services/auth_service.dart';
@@ -644,6 +645,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _loginWithGoogle() async {
+    final platform = PlatformDetector.of(context);
+    if (platform.isDesktop) {
+      final opened = await launchWindowsGoogleLogin();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            opened
+                ? 'Đã mở trình duyệt để đăng nhập Google. Sau khi xác nhận, Windows sẽ quay lại app.'
+                : 'Không mở được trình duyệt đăng nhập Google.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final ok = await ref
         .read(authControllerProvider.notifier)
         .loginWithGoogle();

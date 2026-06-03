@@ -2,8 +2,10 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/services/desktop_oauth_service.dart';
 import 'core/theme/cineviet_theme.dart';
 import 'core/widgets/adaptive_scaffold.dart';
+import 'core/widgets/desktop_drag_scroll.dart';
 import 'core/widgets/update_prompt.dart';
 import 'features/home/home_screen.dart';
 import 'features/search/search_browse_screen.dart';
@@ -34,18 +36,21 @@ class CineVietApp extends StatelessWidget {
       title: 'CineViet',
       debugShowCheckedModeBanner: false,
       theme: CineVietTheme.dark(),
+      scrollBehavior: const DesktopDragScrollBehavior(),
       navigatorObservers: Firebase.apps.isNotEmpty
           ? [FirebaseAnalyticsObserver(analytics: _analytics)]
           : const [],
-      home: const UpdatePrompt(
-        child: AdaptiveScaffold(
-          children: [
-            HomeScreen(),
-            SearchBrowseScreen(),
-            MyScreen(),
-            HistoryScreen(),
-            ProfileScreen(),
-          ],
+      home: const DesktopOAuthHandler(
+        child: UpdatePrompt(
+          child: AdaptiveScaffold(
+            children: [
+              HomeScreen(),
+              SearchBrowseScreen(),
+              MyScreen(),
+              HistoryScreen(),
+              ProfileScreen(),
+            ],
+          ),
         ),
       ),
     );
