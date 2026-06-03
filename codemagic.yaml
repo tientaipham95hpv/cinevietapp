@@ -1,0 +1,56 @@
+workflows:
+  ios-release:
+    name: CineViet iOS Release
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - app_store_connect
+      vars:
+        BUNDLE_ID: "live.cineviet.cinevietios"
+    scripts:
+      - name: Flutter clean/get
+        script: |
+          flutter clean
+          flutter pub get
+      - name: Install pods
+        script: |
+          cd ios
+          pod install --repo-update
+          cd ..
+      - name: Build iOS release without signing
+        script: |
+          flutter build ipa --release --no-codesign
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/archive/*.xcarchive
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      email:
+        recipients:
+          - cineviet.live@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  windows-release:
+    name: CineViet Windows Release
+    max_build_duration: 60
+    instance_type: windows_x2
+    environment:
+      flutter: stable
+    scripts:
+      - name: Flutter get
+        script: flutter pub get
+      - name: Enable Windows desktop
+        script: flutter config --enable-windows-desktop
+      - name: Build Windows
+        script: flutter build windows --release
+      - name: Package Windows zip
+        script: powershell Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath cineviet-windows.zip -Force
+    artifacts:
+      - cineviet-windows.zip
+      - build/windows/x64/runner/Release/**

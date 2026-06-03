@@ -1,0 +1,53 @@
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/theme/cineviet_theme.dart';
+import 'core/widgets/adaptive_scaffold.dart';
+import 'core/widgets/update_prompt.dart';
+import 'features/home/home_screen.dart';
+import 'features/search/search_browse_screen.dart';
+import 'features/my/my_screen.dart';
+import 'features/profile/profile_screen.dart';
+import 'features/history/history_screen.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+    await FirebaseAnalytics.instance.logAppOpen();
+  } catch (_) {
+    // Firebase config may be absent on non-Android targets for now.
+    // Keep the app usable; analytics will simply be disabled there.
+  }
+  runApp(const ProviderScope(child: CineVietApp()));
+}
+
+class CineVietApp extends StatelessWidget {
+  const CineVietApp({super.key});
+
+  static final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'CineViet',
+      debugShowCheckedModeBanner: false,
+      theme: CineVietTheme.dark(),
+      navigatorObservers: Firebase.apps.isNotEmpty
+          ? [FirebaseAnalyticsObserver(analytics: _analytics)]
+          : const [],
+      home: const UpdatePrompt(
+        child: AdaptiveScaffold(
+          children: [
+            HomeScreen(),
+            SearchBrowseScreen(),
+            MyScreen(),
+            HistoryScreen(),
+            ProfileScreen(),
+          ],
+        ),
+      ),
+    );
+  }
+}
