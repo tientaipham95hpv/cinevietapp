@@ -49,3 +49,7 @@ android/key.properties
 android/app/keystore/
 *.jks
 *.keystore
+android/build/
+ios/Pods/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
