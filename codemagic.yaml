@@ -23,10 +23,15 @@ workflows:
           cd ..
       - name: Build iOS release without signing
         script: |
-          flutter build ipa --release --no-codesign
+          flutter build ios --release --no-codesign
+      - name: Package unsigned iOS app
+        script: |
+          cd build/ios/iphoneos
+          zip -yr ../../../cineviet-ios-unsigned.zip Runner.app
+          cd ../../..
     artifacts:
-      - build/ios/ipa/*.ipa
-      - build/ios/archive/*.xcarchive
+      - cineviet-ios-unsigned.zip
+      - build/ios/iphoneos/Runner.app
       - /tmp/xcodebuild_logs/*.log
     publishing:
       email:
