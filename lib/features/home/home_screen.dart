@@ -364,10 +364,14 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                           end: Alignment.centerLeft,
                           colors: [
                             Colors.transparent,
-                            CineVietColors.bg.withValues(alpha: 0.62),
-                            CineVietColors.bg.withValues(alpha: 0.96),
+                            CineVietColors.bg.withValues(
+                              alpha: widget.platform.isMobile ? 0.46 : 0.62,
+                            ),
+                            CineVietColors.bg.withValues(
+                              alpha: widget.platform.isMobile ? 0.82 : 0.96,
+                            ),
                           ],
-                          stops: const [0.0, 0.46, 1.0],
+                          stops: const [0.0, 0.50, 1.0],
                         ),
                       ),
                     ),
@@ -377,11 +381,15 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.black.withValues(alpha: 0.10),
+                            Colors.black.withValues(
+                              alpha: widget.platform.isMobile ? 0.04 : 0.10,
+                            ),
                             Colors.transparent,
-                            CineVietColors.bg,
+                            CineVietColors.bg.withValues(
+                              alpha: widget.platform.isMobile ? 0.84 : 1.0,
+                            ),
                           ],
-                          stops: const [0.0, 0.50, 1.0],
+                          stops: const [0.0, 0.56, 1.0],
                         ),
                       ),
                     ),
