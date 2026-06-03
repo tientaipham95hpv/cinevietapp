@@ -1,5 +1,8 @@
+import 'dart:io' show Platform;
+
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player_media_kit/video_player_media_kit.dart';
@@ -17,12 +20,13 @@ import 'features/history/history_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   VideoPlayerMediaKit.ensureInitialized(windows: true);
-  try {
-    await Firebase.initializeApp();
-    await FirebaseAnalytics.instance.logAppOpen();
-  } catch (_) {
-    // Firebase config may be absent on non-Android targets for now.
-    // Keep the app usable; analytics will simply be disabled there.
+  if (!kIsWeb && Platform.isAndroid) {
+    try {
+      await Firebase.initializeApp();
+      await FirebaseAnalytics.instance.logAppOpen();
+    } catch (_) {
+      // Keep the app usable; analytics will simply be disabled.
+    }
   }
   runApp(const ProviderScope(child: CineVietApp()));
 }
@@ -30,7 +34,7 @@ Future<void> main() async {
 class CineVietApp extends StatelessWidget {
   const CineVietApp({super.key});
 
-  static final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
+  static FirebaseAnalytics get _analytics => FirebaseAnalytics.instance;
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +43,8 @@ class CineVietApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: CineVietTheme.dark(),
       scrollBehavior: const DesktopDragScrollBehavior(),
-      navigatorObservers: Firebase.apps.isNotEmpty
+      navigatorObservers:
+          !kIsWeb && Platform.isAndroid && Firebase.apps.isNotEmpty
           ? [FirebaseAnalyticsObserver(analytics: _analytics)]
           : const [],
       home: const DesktopOAuthHandler(

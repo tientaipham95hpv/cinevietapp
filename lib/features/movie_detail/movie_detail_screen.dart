@@ -201,6 +201,9 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
         : platform.isTablet
         ? 590.0
         : 700.0;
+    final heroImageUrl = platform.isMobile
+        ? (movie.portraitImageUrl ?? movie.landscapeImageUrl)
+        : (movie.landscapeImageUrl ?? movie.portraitImageUrl);
 
     return CustomScrollView(
       controller: _scrollController,
@@ -212,9 +215,9 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (movie.portraitImageUrl != null)
+                if (heroImageUrl != null)
                   CachedNetworkImage(
-                    imageUrl: movie.portraitImageUrl!,
+                    imageUrl: heroImageUrl,
                     fit: BoxFit.cover,
                     alignment: Alignment.topCenter,
                     placeholder: (context, url) =>
