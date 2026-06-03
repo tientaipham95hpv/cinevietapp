@@ -50,8 +50,6 @@ android {
         }
         create("tv") {
             dimension = "device"
-            // TV universal APK must stay above previous split-per-ABI TV versionCode (7054).
-            versionCode = 7055
         }
     }
 

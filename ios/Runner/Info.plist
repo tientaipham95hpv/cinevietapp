@@ -26,6 +26,14 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>CineViet cần quyền camera để quét mã QR ghép nối TV.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CineViet cần quyền thư viện ảnh nếu bạn chọn ảnh hoặc mã QR từ thiết bị.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>CineViet sử dụng mạng nội bộ để hỗ trợ phát và ghép nối thiết bị khi cần.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CineViet cần quyền microphone nếu tính năng phát nội dung yêu cầu âm thanh hệ thống.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

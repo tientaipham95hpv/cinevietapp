@@ -11,13 +11,12 @@ class CineVietLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = ClipRRect(
-      borderRadius: BorderRadius.circular(size * 0.22),
-      child: Image.asset(
-        'assets/branding/cineviet-icon.png',
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
+    final icon = SizedBox.square(
+      dimension: size,
+      child: CustomPaint(
+        painter: _CineVietLogoPainter(),
+        isComplex: false,
+        willChange: false,
       ),
     );
     if (!showText) return icon;
@@ -38,4 +37,51 @@ class CineVietLogo extends StatelessWidget {
       ],
     );
   }
+}
+
+class _CineVietLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shortest = size.shortestSide;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = shortest * 0.42;
+
+    final bgRect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(shortest * 0.22),
+    );
+    canvas.drawRRect(bgRect, Paint()..color = CineVietColors.bg2);
+
+    final glowPaint = Paint()
+      ..color = CineVietColors.accent.withValues(alpha: 0.18)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = shortest * 0.16
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    canvas.drawCircle(center, radius * 0.86, glowPaint);
+
+    final ringPaint = Paint()
+      ..color = CineVietColors.accent
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = shortest * 0.075
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+    canvas.drawCircle(center, radius * 0.86, ringPaint);
+
+    final play = Path()
+      ..moveTo(center.dx - shortest * 0.10, center.dy - shortest * 0.19)
+      ..lineTo(center.dx - shortest * 0.10, center.dy + shortest * 0.19)
+      ..lineTo(center.dx + shortest * 0.23, center.dy)
+      ..close();
+    canvas.drawPath(
+      play,
+      Paint()
+        ..color = CineVietColors.accent
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _CineVietLogoPainter oldDelegate) => false;
 }

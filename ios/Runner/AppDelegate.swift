@@ -4,7 +4,7 @@ import MediaPlayer
 import UIKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
   private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
   private weak var volumeSlider: UISlider?
 
@@ -12,8 +12,13 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    GeneratedPluginRegistrant.register(with: self)
     let ok = super.application(application, didFinishLaunchingWithOptions: launchOptions)
-    setupPlayerControlChannel()
+
+    DispatchQueue.main.async { [weak self] in
+      self?.setupPlayerControlChannel()
+    }
+
     return ok
   }
 
@@ -22,6 +27,7 @@ import UIKit
 
     if volumeView.superview == nil {
       volumeView.alpha = 0.01
+      volumeView.isUserInteractionEnabled = false
       controller.view.addSubview(volumeView)
       volumeSlider = volumeView.subviews.compactMap { $0 as? UISlider }.first
     }
@@ -67,9 +73,5 @@ import UIKit
     }
     volumeSlider?.setValue(clamped, animated: false)
     volumeSlider?.sendActions(for: .valueChanged)
-  }
-
-  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
-    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
   }
 }
