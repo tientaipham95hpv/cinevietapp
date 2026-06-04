@@ -87,18 +87,21 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       ? widget.episode.linkEmbed!
       : '';
 
-  String get _streamUrl {
+  List<String> get _candidateStreamUrls {
     final raw = _rawStreamUrl.trim();
-    if (raw.isEmpty) return raw;
-    if (Platform.isWindows && raw.startsWith(RegExp(r'https?://'))) {
-      final alreadyProxy =
-          Uri.tryParse(raw)?.host == 'cineviet.live' &&
-          Uri.tryParse(raw)?.path == '/api/stream';
-      if (!alreadyProxy) {
-        return 'https://cineviet.live/api/stream?url=${Uri.encodeComponent(raw)}';
-      }
-    }
-    return raw;
+    if (raw.isEmpty) return const [];
+    if (!raw.startsWith(RegExp(r'https?://'))) return [raw];
+
+    final parsed = Uri.tryParse(raw);
+    final alreadyProxy =
+        parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
+    if (!Platform.isWindows || alreadyProxy) return [raw];
+
+    final proxy =
+        'https://cineviet.live/api/stream?url=${Uri.encodeComponent(raw)}';
+    // Windows/media_kit handles many HLS URLs directly. Try the original URL
+    // first to avoid proxy stalls, then fall back to CineViet's HLS proxy.
+    return [raw, proxy];
   }
 
   @override
@@ -211,7 +214,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   Future<void> _initPlayer() async {
-    if (_streamUrl.isEmpty || !_streamUrl.startsWith(RegExp(r'https?://'))) {
+    final candidateUrls = _candidateStreamUrls;
+    if (candidateUrls.isEmpty ||
+        !candidateUrls.first.startsWith(RegExp(r'https?://'))) {
       setState(() {
         _loading = false;
         _error = 'Tập này chưa có link m3u8 hợp lệ để phát.';
@@ -219,17 +224,45 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       return;
     }
 
-    VideoPlayerController controller;
+    VideoPlayerController? controller;
+    Object? lastError;
+    for (final streamUrl in candidateUrls) {
+      try {
+        // ignore: deprecated_member_use
+        final nextController = VideoPlayerController.network(
+          streamUrl,
+          formatHint: VideoFormat.hls,
+          httpHeaders: const <String, String>{},
+        );
+        _controller = nextController;
+        nextController.addListener(_syncPlayerState);
+        await nextController.initialize().timeout(
+          Platform.isWindows
+              ? const Duration(seconds: 12)
+              : const Duration(seconds: 30),
+        );
+        controller = nextController;
+        break;
+      } catch (e) {
+        lastError = e;
+        try {
+          _controller?.removeListener(_syncPlayerState);
+          await _controller?.dispose();
+        } catch (_) {}
+        _controller = null;
+      }
+    }
+
+    if (controller == null) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Không mở được stream: $lastError';
+      });
+      return;
+    }
+
     try {
-      // ignore: deprecated_member_use
-      controller = VideoPlayerController.network(
-        _streamUrl,
-        formatHint: VideoFormat.hls,
-        httpHeaders: <String, String>{},
-      );
-      _controller = controller;
-      controller.addListener(_syncPlayerState);
-      await controller.initialize();
       final roomState = _watchRoomState;
       if (_isWatchTogether && !_isWatchHost && roomState != null) {
         final target = Duration(
@@ -237,14 +270,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         );
         await controller.seekTo(target);
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'Không mở được stream: $e';
-      });
-      return;
-    }
+    } catch (_) {}
 
     if (!mounted) return;
     setState(() {
