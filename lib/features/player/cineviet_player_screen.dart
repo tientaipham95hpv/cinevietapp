@@ -268,6 +268,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _gestureHintTimer?.cancel();
     _watchChatController.dispose();
     _saveProgress();
+    if (_isWatchTogether && _isWatchHost) {
+      WatchTogetherService.closeActiveRoom();
+    }
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
     _controller?.removeListener(_syncPlayerState);
     _controller?.dispose();

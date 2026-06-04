@@ -140,6 +140,15 @@ class WatchTogetherService {
       } catch (_) {}
     }
     _activeRoomSocket = socket;
+    socket.onDisconnect((_) {
+      if (_activeRoomSocket?.id == socket.id) _activeRoomSocket = null;
+    });
+    socket.on('room-closed', (_) {
+      if (_activeRoomSocket?.id == socket.id) _activeRoomSocket = null;
+      try {
+        socket.disconnect();
+      } catch (_) {}
+    });
   }
 
   static Future<List<WatchTogetherRoom>> publicRooms() async {
@@ -275,6 +284,16 @@ class WatchTogetherService {
     final uri = Uri.parse('$baseUrl/xem-chung/phong/$code');
     if (userName == null || userName.trim().isEmpty) return uri.toString();
     return uri.replace(queryParameters: {'name': userName.trim()}).toString();
+  }
+
+  static void closeActiveRoom() {
+    final socket = _activeRoomSocket;
+    if (socket == null) return;
+    _activeRoomSocket = null;
+    try {
+      socket.emit('leave-room');
+      socket.disconnect();
+    } catch (_) {}
   }
 
   static void sendMessage(String text) {
