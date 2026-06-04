@@ -67,9 +67,12 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   String? _lastWatchRoomFrom;
   int _lastWatchSyncSentAt = 0;
   bool _applyingWatchSync = false;
+  double? _scrubProgress;
 
   bool get _isWatchTogether => _watchRoomCode != null;
-  bool get _isWatchHost => _watchRoomState?.isCurrentSocketHost ?? true;
+  bool get _isWatchHost =>
+      _watchRoomState?.isCurrentSocketHost ??
+      WatchTogetherService.activeSocketIsHost;
   String? get _watchRoomCode {
     final code = widget.watchTogetherCode?.trim().toUpperCase();
     if (code != null && code.isNotEmpty) return code;
@@ -152,6 +155,18 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     WatchTogetherService.sendMessage(text);
     _watchChatController.clear();
     _revealControls();
+  }
+
+  Future<void> _deleteWatchRoomManually() async {
+    if (!_isWatchTogether || !_isWatchHost) return;
+    await WatchTogetherService.deleteActiveRoom();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Đã xoá phòng xem chung.')));
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _applyWatchRoomSync(WatchTogetherState state) async {
@@ -284,7 +299,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _watchChatController.dispose();
     _saveProgress();
     if (_isWatchTogether && _isWatchHost) {
-      WatchTogetherService.closeActiveRoom();
+      WatchTogetherService.closeActiveRoom(forceDelete: true);
     }
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
     _controller?.removeListener(_syncPlayerState);
@@ -665,18 +680,47 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _revealControls();
   }
 
-  void _seekToFraction(double value) {
+  void _previewSeekToFraction(double value) {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     final durationMs = controller.value.duration.inMilliseconds;
     if (durationMs <= 0) return;
-    final target = Duration(
-      milliseconds: (durationMs * value.clamp(0, 1)).round(),
-    );
+    final progress = value.clamp(0.0, 1.0);
+    final target = Duration(milliseconds: (durationMs * progress).round());
+    setState(() {
+      _scrubProgress = progress;
+      _pendingSeekPosition = target;
+      _seekHint = _fmt(target);
+    });
+    _seekHintTimer?.cancel();
+    _revealControls();
+  }
+
+  Future<void> _commitSeekToFraction(double value) async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    final durationMs = controller.value.duration.inMilliseconds;
+    if (durationMs <= 0) return;
+    final progress = value.clamp(0.0, 1.0);
+    final target = Duration(milliseconds: (durationMs * progress).round());
+    setState(() {
+      _scrubProgress = progress;
+      _pendingSeekPosition = target;
+      _seekHint = _fmt(target);
+    });
     try {
-      controller.seekTo(target);
+      await controller.seekTo(target);
       _emitWatchSync(force: true);
     } catch (_) {}
+    if (!mounted) return;
+    setState(() {
+      _scrubProgress = null;
+      _pendingSeekPosition = null;
+    });
+    _seekHintTimer?.cancel();
+    _seekHintTimer = Timer(const Duration(milliseconds: 550), () {
+      if (mounted) setState(() => _seekHint = null);
+    });
     _revealControls();
     _saveProgress();
   }
@@ -815,9 +859,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             ? _WatchTogetherChatPanel(
                 key: const ValueKey('watch-chat-panel'),
                 code: code,
+                isHost: _isWatchHost,
                 messages: _watchMessages,
                 inputController: _watchChatController,
                 onSend: _sendWatchMessage,
+                onDeleteRoom: _deleteWatchRoomManually,
                 onHide: () => setState(() => _watchChatVisible = false),
               )
             : Align(
@@ -1156,6 +1202,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         final progress = duration.inMilliseconds <= 0
             ? 0.0
             : position.inMilliseconds / duration.inMilliseconds;
+        final displayProgress = (_scrubProgress ?? progress).clamp(0.0, 1.0);
+        final displayPosition = _pendingSeekPosition ?? position;
         return Container(
           padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
           decoration: BoxDecoration(
@@ -1176,7 +1224,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
               Row(
                 children: [
                   Text(
-                    _seekHint ?? _fmt(position),
+                    _seekHint ?? _fmt(displayPosition),
                     style: const TextStyle(
                       color: CineVietColors.accent,
                       fontWeight: FontWeight.w900,
@@ -1196,9 +1244,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                         ),
                       ),
                       child: Slider(
-                        value: progress.clamp(0, 1),
-                        onChanged: _seekToFraction,
-                        onChangeEnd: (_) => _saveProgress(),
+                        value: displayProgress,
+                        onChangeStart: _previewSeekToFraction,
+                        onChanged: _previewSeekToFraction,
+                        onChangeEnd: _commitSeekToFraction,
                       ),
                     ),
                   ),
@@ -1302,16 +1351,20 @@ class _WatchTogetherChatPanel extends StatelessWidget {
   const _WatchTogetherChatPanel({
     super.key,
     required this.code,
+    required this.isHost,
     required this.messages,
     required this.inputController,
     required this.onSend,
+    required this.onDeleteRoom,
     required this.onHide,
   });
 
   final String code;
+  final bool isHost;
   final List<WatchTogetherMessage> messages;
   final TextEditingController inputController;
   final VoidCallback onSend;
+  final Future<void> Function() onDeleteRoom;
   final VoidCallback onHide;
 
   @override
@@ -1383,6 +1436,15 @@ class _WatchTogetherChatPanel extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (isHost)
+                      IconButton(
+                        onPressed: onDeleteRoom,
+                        icon: const Icon(
+                          Icons.delete_outline_rounded,
+                          color: Color(0xFFFF7A7A),
+                        ),
+                        tooltip: 'Xoá phòng',
+                      ),
                     IconButton(
                       onPressed: onHide,
                       icon: const Icon(

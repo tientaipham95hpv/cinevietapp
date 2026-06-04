@@ -127,11 +127,19 @@ class WatchTogetherService {
     ),
   );
   static io.Socket? _activeRoomSocket;
+  static String? _activeRoomCode;
+  static bool _activeSocketIsHost = false;
 
   static io.Socket? get activeRoomSocket => _activeRoomSocket;
   static String? get activeSocketId => _activeRoomSocket?.id;
+  static String? get activeRoomCode => _activeRoomCode;
+  static bool get activeSocketIsHost => _activeSocketIsHost;
 
-  static void _keepRoomSocket(io.Socket socket) {
+  static void _keepRoomSocket(
+    io.Socket socket, {
+    required String roomCode,
+    required bool isHost,
+  }) {
     final previous = _activeRoomSocket;
     if (previous != null && previous.id != socket.id) {
       try {
@@ -140,11 +148,21 @@ class WatchTogetherService {
       } catch (_) {}
     }
     _activeRoomSocket = socket;
+    _activeRoomCode = roomCode.trim().toUpperCase();
+    _activeSocketIsHost = isHost;
     socket.onDisconnect((_) {
-      if (_activeRoomSocket?.id == socket.id) _activeRoomSocket = null;
+      if (_activeRoomSocket?.id == socket.id) {
+        _activeRoomSocket = null;
+        _activeRoomCode = null;
+        _activeSocketIsHost = false;
+      }
     });
     socket.on('room-closed', (_) {
-      if (_activeRoomSocket?.id == socket.id) _activeRoomSocket = null;
+      if (_activeRoomSocket?.id == socket.id) {
+        _activeRoomSocket = null;
+        _activeRoomCode = null;
+        _activeSocketIsHost = false;
+      }
       try {
         socket.disconnect();
       } catch (_) {}
@@ -207,7 +225,7 @@ class WatchTogetherService {
           final room = roomData is Map
               ? WatchTogetherState.fromJson(Map<String, dynamic>.from(roomData))
               : null;
-          _keepRoomSocket(socket);
+          _keepRoomSocket(socket, roomCode: code, isHost: true);
           if (!completer.isCompleted) {
             completer.complete(
               WatchTogetherCreateResult(code: code, room: room),
@@ -263,7 +281,11 @@ class WatchTogetherService {
           final room = roomData is Map
               ? WatchTogetherState.fromJson(Map<String, dynamic>.from(roomData))
               : null;
-          _keepRoomSocket(socket);
+          _keepRoomSocket(
+            socket,
+            roomCode: room?.code.isNotEmpty == true ? room!.code : code,
+            isHost: room?.hostSocketId == socket.id,
+          );
           if (!completer.isCompleted) completer.complete(room);
           timeout?.cancel();
         },
@@ -286,15 +308,47 @@ class WatchTogetherService {
     return uri.replace(queryParameters: {'name': userName.trim()}).toString();
   }
 
-  static void closeActiveRoom() {
+  static Future<void> closeActiveRoom({bool forceDelete = false}) async {
     final socket = _activeRoomSocket;
+    final code = _activeRoomCode;
+    final isHost = _activeSocketIsHost;
     if (socket == null) return;
     _activeRoomSocket = null;
+    _activeRoomCode = null;
+    _activeSocketIsHost = false;
     try {
-      socket.emit('leave-room');
+      if (forceDelete || isHost) {
+        final completer = Completer<void>();
+        Timer? timeout;
+        socket.emitWithAck(
+          'close-room',
+          {'code': code},
+          ack: (_) {
+            if (!completer.isCompleted) completer.complete();
+            timeout?.cancel();
+          },
+        );
+        timeout = Timer(const Duration(milliseconds: 900), () {
+          if (!completer.isCompleted) completer.complete();
+        });
+        await completer.future;
+      } else {
+        socket.emit('leave-room');
+      }
       socket.disconnect();
-    } catch (_) {}
+    } catch (_) {
+      try {
+        if (forceDelete || isHost) {
+          socket.emit('close-room', {'code': code});
+        } else {
+          socket.emit('leave-room');
+        }
+        socket.disconnect();
+      } catch (_) {}
+    }
   }
+
+  static Future<void> deleteActiveRoom() => closeActiveRoom(forceDelete: true);
 
   static void sendMessage(String text) {
     final message = text.trim();
