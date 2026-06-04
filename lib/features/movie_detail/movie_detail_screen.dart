@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../player/cineviet_player_screen.dart';
 import '../search/search_browse_screen.dart';
+import '../watch_together/watch_together_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/platform/platform_detector.dart';
 import '../../core/theme/cineviet_colors.dart';
@@ -138,6 +139,12 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
           episode: episode,
         ),
       ),
+    );
+  }
+
+  void _openWatchTogether() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => WatchTogetherScreen(prefillMovie: movie)),
     );
   }
 
@@ -333,6 +340,13 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                                         : () => _openEpisode(0, 0),
                                     icon: const Icon(Icons.play_arrow_rounded),
                                     label: const Text('Xem ngay'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: movie.episodes.isEmpty
+                                        ? null
+                                        : _openWatchTogether,
+                                    icon: const Icon(Icons.groups_rounded),
+                                    label: const Text('Xem chung'),
                                   ),
                                   OutlinedButton.icon(
                                     onPressed: () =>
