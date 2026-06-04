@@ -62,8 +62,13 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   bool _watchChatVisible = true;
   final List<WatchTogetherMessage> _watchMessages = [];
   final TextEditingController _watchChatController = TextEditingController();
+  WatchTogetherState? _watchRoomState;
+  String? _lastWatchRoomFrom;
+  int _lastWatchSyncSentAt = 0;
+  bool _applyingWatchSync = false;
 
   bool get _isWatchTogether => _watchRoomCode != null;
+  bool get _isWatchHost => _watchRoomState?.isCurrentSocketHost ?? true;
   String? get _watchRoomCode {
     final code = widget.watchTogetherCode?.trim().toUpperCase();
     if (code != null && code.isNotEmpty) return code;
@@ -87,6 +92,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       DeviceOrientation.landscapeRight,
     ]);
     HardwareKeyboard.instance.addHandler(_handleRemoteKey);
+    _watchRoomState = widget.watchTogetherState;
     _watchMessages.addAll(widget.watchTogetherState?.messages ?? const []);
     _bindWatchTogetherSocket();
     _loadScreenBrightness();
@@ -104,11 +110,14 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       final state = WatchTogetherState.fromJson(
         Map<String, dynamic>.from(data),
       );
+      _lastWatchRoomFrom = data['_from']?.toString();
       setState(() {
+        _watchRoomState = state;
         _watchMessages
           ..clear()
           ..addAll(state.messages);
       });
+      _applyWatchRoomSync(state);
     });
     socket.on('chat-message', (data) {
       if (!mounted || data is! Map) return;
@@ -128,6 +137,47 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     WatchTogetherService.sendMessage(text);
     _watchChatController.clear();
     _revealControls();
+  }
+
+  Future<void> _applyWatchRoomSync(WatchTogetherState state) async {
+    if (!_isWatchTogether || _isWatchHost) return;
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    final from = _lastWatchRoomFrom;
+    final activeId = WatchTogetherService.activeSocketId;
+    if (from != null && activeId != null && from == activeId) return;
+
+    final target = Duration(milliseconds: (state.currentTime * 1000).round());
+    final current = controller.value.position;
+    final diffMs = (target - current).inMilliseconds.abs();
+    _applyingWatchSync = true;
+    try {
+      if (diffMs > 3000) {
+        await controller.seekTo(target);
+      }
+      if (state.playing && !controller.value.isPlaying) {
+        await controller.play();
+      } else if (!state.playing && controller.value.isPlaying) {
+        await controller.pause();
+      }
+    } catch (_) {
+      // Watch Together sync should never break playback controls.
+    } finally {
+      _applyingWatchSync = false;
+    }
+  }
+
+  void _emitWatchSync({bool force = false}) {
+    if (!_isWatchTogether || !_isWatchHost || _applyingWatchSync) return;
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (!force && now - _lastWatchSyncSentAt < 1500) return;
+    _lastWatchSyncSentAt = now;
+    WatchTogetherService.syncState(
+      currentTime: controller.value.position.inMilliseconds / 1000,
+      playing: controller.value.isPlaying,
+    );
   }
 
   Future<void> _initPlayer() async {
@@ -150,6 +200,13 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       _controller = controller;
       controller.addListener(_syncPlayerState);
       await controller.initialize();
+      final roomState = _watchRoomState;
+      if (_isWatchTogether && !_isWatchHost && roomState != null) {
+        final target = Duration(
+          milliseconds: (roomState.currentTime * 1000).round(),
+        );
+        await controller.seekTo(target);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -186,7 +243,15 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
     try {
       await controller.setVolume(_appVolume);
-      await controller.play();
+      final roomState = _watchRoomState;
+      if (_isWatchTogether &&
+          !_isWatchHost &&
+          roomState != null &&
+          !roomState.playing) {
+        await controller.pause();
+      } else {
+        await controller.play();
+      }
     } catch (_) {
       // Some devices require the user to press play manually.
     }
@@ -446,10 +511,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   void _startProgressTimer() {
     _progressTimer?.cancel();
-    _progressTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _saveProgress(),
-    );
+    _progressTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _saveProgress();
+      _emitWatchSync();
+    });
   }
 
   Future<void> _saveProgress() async {
@@ -577,6 +642,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       } else {
         controller.play();
       }
+      _emitWatchSync(force: true);
     } catch (_) {}
     _revealControls();
   }
@@ -591,6 +657,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     );
     try {
       controller.seekTo(target);
+      _emitWatchSync(force: true);
     } catch (_) {}
     _revealControls();
     _saveProgress();
@@ -607,6 +674,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     );
     try {
       controller.seekTo(Duration(milliseconds: targetMs));
+      _emitWatchSync(force: true);
     } catch (_) {}
     _showSeekHint(delta);
     _revealControls();

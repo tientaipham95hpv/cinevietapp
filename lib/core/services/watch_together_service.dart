@@ -46,6 +46,7 @@ class WatchTogetherState {
     required this.code,
     required this.movieTitle,
     required this.videoUrl,
+    required this.hostSocketId,
     required this.members,
     required this.currentTime,
     required this.playing,
@@ -53,6 +54,7 @@ class WatchTogetherState {
   });
 
   final String code;
+  final String hostSocketId;
   final String movieTitle;
   final String videoUrl;
   final List<WatchTogetherMember> members;
@@ -60,10 +62,15 @@ class WatchTogetherState {
   final bool playing;
   final List<WatchTogetherMessage> messages;
 
+  bool get isCurrentSocketHost =>
+      hostSocketId.isNotEmpty &&
+      WatchTogetherService.activeSocketId == hostSocketId;
+
   factory WatchTogetherState.fromJson(
     Map<String, dynamic> json,
   ) => WatchTogetherState(
     code: '${json['code'] ?? ''}',
+    hostSocketId: '${json['hostSocketId'] ?? ''}',
     movieTitle: '${json['movieTitle'] ?? 'Phòng xem chung'}',
     videoUrl: '${json['videoUrl'] ?? ''}',
     members: ((json['members'] as List?) ?? const [])
@@ -122,6 +129,7 @@ class WatchTogetherService {
   static io.Socket? _activeRoomSocket;
 
   static io.Socket? get activeRoomSocket => _activeRoomSocket;
+  static String? get activeSocketId => _activeRoomSocket?.id;
 
   static void _keepRoomSocket(io.Socket socket) {
     final previous = _activeRoomSocket;
@@ -276,6 +284,12 @@ class WatchTogetherService {
       return;
     }
     socket.emitWithAck('chat-message', {'text': message});
+  }
+
+  static void syncState({required double currentTime, required bool playing}) {
+    final socket = _activeRoomSocket;
+    if (socket == null || socket.disconnected == true) return;
+    socket.emit('sync-state', {'currentTime': currentTime, 'playing': playing});
   }
 
   static String? firstPlayableUrl(Movie movie) {

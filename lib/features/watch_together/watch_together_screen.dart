@@ -30,11 +30,21 @@ class WatchTogetherScreen extends ConsumerStatefulWidget {
 class _WatchTogetherScreenState extends ConsumerState<WatchTogetherScreen> {
   final _codeController = TextEditingController();
   bool _loading = false;
+  bool _createPublic = true;
+  int _maxMembers = 8;
+  EpisodeServer? _selectedServer;
+  EpisodeItem? _selectedEpisode;
   List<WatchTogetherRoom> _rooms = const [];
 
   @override
   void initState() {
     super.initState();
+    final servers = widget.prefillMovie?.episodes ?? const <EpisodeServer>[];
+    _selectedServer =
+        widget.prefillServer ?? (servers.isNotEmpty ? servers.first : null);
+    final episodes = _selectedServer?.items ?? const <EpisodeItem>[];
+    _selectedEpisode =
+        widget.prefillEpisode ?? (episodes.isNotEmpty ? episodes.first : null);
     Future.microtask(_loadRooms);
   }
 
@@ -64,8 +74,8 @@ class _WatchTogetherScreenState extends ConsumerState<WatchTogetherScreen> {
 
   void _openRoom({required WatchTogetherState? room, required String code}) {
     final movie = widget.prefillMovie;
-    final server = widget.prefillServer;
-    final episode = widget.prefillEpisode;
+    final server = _selectedServer ?? widget.prefillServer;
+    final episode = _selectedEpisode ?? widget.prefillEpisode;
     if (movie != null && server != null && episode != null) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
@@ -84,23 +94,49 @@ class _WatchTogetherScreenState extends ConsumerState<WatchTogetherScreen> {
       return;
     }
 
-    final roomTitle = room?.movieTitle.trim();
+    final roomVideoUrl = room?.videoUrl.trim();
+    if (room != null && roomVideoUrl != null && roomVideoUrl.isNotEmpty) {
+      final roomTitle = room.movieTitle.trim().isNotEmpty
+          ? room.movieTitle.trim()
+          : 'Phòng xem chung $code';
+      final roomMovie = Movie(
+        id: 0,
+        title: roomTitle,
+        slug: 'watch-together-$code',
+      );
+      final roomEpisode = EpisodeItem(name: 'Đang xem', linkM3u8: roomVideoUrl);
+      final roomServer = EpisodeServer(name: 'Xem chung', items: [roomEpisode]);
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CineVietPlayerScreen(
+            movie: roomMovie,
+            server: roomServer,
+            episode: roomEpisode,
+            watchTogetherState: room,
+            watchTogetherCode: code,
+          ),
+        ),
+      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Đã vào phòng Xem chung $code')));
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          roomTitle != null && roomTitle.isNotEmpty
-              ? 'Đã vào phòng $code: $roomTitle. Hãy mở phim từ chi tiết phim để phát trong app.'
-              : 'Đã vào phòng $code. Hãy mở phim từ chi tiết phim để phát trong app.',
-        ),
+        content: Text('Đã vào phòng $code nhưng phòng chưa có video để phát.'),
       ),
     );
   }
 
   Future<void> _createRoomFromMovie(Movie movie) async {
-    final videoUrl = widget.prefillEpisode?.linkM3u8?.trim().isNotEmpty == true
-        ? widget.prefillEpisode!.linkM3u8!.trim()
-        : widget.prefillEpisode?.linkEmbed?.trim().isNotEmpty == true
-        ? widget.prefillEpisode!.linkEmbed!.trim()
+    final selectedEpisode = _selectedEpisode;
+    final selectedServer = _selectedServer;
+    final videoUrl = selectedEpisode?.linkM3u8?.trim().isNotEmpty == true
+        ? selectedEpisode!.linkM3u8!.trim()
+        : selectedEpisode?.linkEmbed?.trim().isNotEmpty == true
+        ? selectedEpisode!.linkEmbed!.trim()
         : WatchTogetherService.firstPlayableUrl(movie);
     if (videoUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -115,9 +151,17 @@ class _WatchTogetherScreenState extends ConsumerState<WatchTogetherScreen> {
       final result = await WatchTogetherService.createRoom(
         hostName: _displayName,
         videoUrl: videoUrl,
-        movieTitle: movie.title,
+        movieTitle: selectedEpisode != null
+            ? '${movie.title} • ${selectedEpisode.displayName}'
+            : movie.title,
+        maxMembers: _maxMembers,
+        isPublic: _createPublic,
       );
       if (!mounted) return;
+      final oldServer = _selectedServer;
+      final oldEpisode = _selectedEpisode;
+      _selectedServer = selectedServer ?? oldServer;
+      _selectedEpisode = selectedEpisode ?? oldEpisode;
       _openRoom(room: result.room, code: result.code);
     } catch (e) {
       if (!mounted) return;
@@ -234,15 +278,114 @@ class _WatchTogetherScreenState extends ConsumerState<WatchTogetherScreen> {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              if (widget.prefillEpisode != null) ...[
-                                const SizedBox(height: CineVietSpacing.xs),
-                                _ReadOnlyInfoField(
-                                  icon: Icons.link_rounded,
-                                  label: 'Link phim / tập',
-                                  value:
-                                      '${widget.prefillServer?.displayName ?? 'Server'} • ${widget.prefillEpisode!.displayName}',
+                              const SizedBox(height: CineVietSpacing.md),
+                              DropdownButtonFormField<EpisodeServer>(
+                                initialValue: _selectedServer,
+                                decoration: const InputDecoration(
+                                  labelText: 'Server phim',
+                                  prefixIcon: Icon(Icons.dns_rounded),
                                 ),
-                              ],
+                                dropdownColor: CineVietColors.card,
+                                items: movie.episodes
+                                    .map(
+                                      (server) => DropdownMenuItem(
+                                        value: server,
+                                        child: Text(server.displayName),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: _loading
+                                    ? null
+                                    : (server) {
+                                        if (server == null) return;
+                                        setState(() {
+                                          _selectedServer = server;
+                                          _selectedEpisode =
+                                              server.items.isNotEmpty
+                                              ? server.items.first
+                                              : null;
+                                        });
+                                      },
+                              ),
+                              const SizedBox(height: CineVietSpacing.md),
+                              DropdownButtonFormField<EpisodeItem>(
+                                initialValue: _selectedEpisode,
+                                decoration: const InputDecoration(
+                                  labelText: 'Chọn tập phim',
+                                  prefixIcon: Icon(Icons.video_library_rounded),
+                                ),
+                                dropdownColor: CineVietColors.card,
+                                items:
+                                    (_selectedServer?.items ??
+                                            const <EpisodeItem>[])
+                                        .map(
+                                          (episode) => DropdownMenuItem(
+                                            value: episode,
+                                            child: Text(episode.displayName),
+                                          ),
+                                        )
+                                        .toList(),
+                                onChanged: _loading
+                                    ? null
+                                    : (episode) => setState(
+                                        () => _selectedEpisode = episode,
+                                      ),
+                              ),
+                              const SizedBox(height: CineVietSpacing.md),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: SegmentedButton<bool>(
+                                      segments: const [
+                                        ButtonSegment(
+                                          value: true,
+                                          icon: Icon(Icons.public_rounded),
+                                          label: Text('Công khai'),
+                                        ),
+                                        ButtonSegment(
+                                          value: false,
+                                          icon: Icon(Icons.lock_rounded),
+                                          label: Text('Riêng tư'),
+                                        ),
+                                      ],
+                                      selected: {_createPublic},
+                                      onSelectionChanged: _loading
+                                          ? null
+                                          : (values) => setState(
+                                              () =>
+                                                  _createPublic = values.first,
+                                            ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: CineVietSpacing.md),
+                              Wrap(
+                                spacing: CineVietSpacing.sm,
+                                runSpacing: CineVietSpacing.sm,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: Text(
+                                      'Số người:',
+                                      style: TextStyle(
+                                        color: CineVietColors.textSoft,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  for (final value in const [2, 4, 6, 8])
+                                    ChoiceChip(
+                                      label: Text('$value'),
+                                      selected: _maxMembers == value,
+                                      onSelected: _loading
+                                          ? null
+                                          : (_) => setState(
+                                              () => _maxMembers = value,
+                                            ),
+                                    ),
+                                ],
+                              ),
                               const SizedBox(height: CineVietSpacing.md),
                               TvFocus(
                                 onTap: _loading
