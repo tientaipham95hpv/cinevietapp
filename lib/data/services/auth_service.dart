@@ -13,7 +13,7 @@ import '../repositories/movie_repository.dart';
 
 const _mobileKey = 'cineviet-mobile-app-v1';
 const _googleServerClientId =
-    '511689034636-c7127b68vmqibg1t2jab2t7mek8mq1mt.apps.googleusercontent.com';
+    '186784861581-5l7skrrke87pmf669l6ach0brbra4v76.apps.googleusercontent.com';
 const _tokenKey = 'cineviet_access_token';
 const _refreshKey = 'cineviet_refresh_token';
 const _rememberLoginKey = 'cineviet_remember_login';
