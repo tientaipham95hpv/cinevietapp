@@ -90,6 +90,18 @@ class WatchTogetherService {
       receiveTimeout: const Duration(seconds: 20),
     ),
   );
+  static io.Socket? _activeRoomSocket;
+
+  static void _keepRoomSocket(io.Socket socket) {
+    final previous = _activeRoomSocket;
+    if (previous != null && previous.id != socket.id) {
+      try {
+        previous.emit('leave-room');
+        previous.disconnect();
+      } catch (_) {}
+    }
+    _activeRoomSocket = socket;
+  }
 
   static Future<List<WatchTogetherRoom>> publicRooms() async {
     final response = await _dio.get('/watch-party/rooms');
@@ -147,16 +159,12 @@ class WatchTogetherService {
           final room = roomData is Map
               ? WatchTogetherState.fromJson(Map<String, dynamic>.from(roomData))
               : null;
+          _keepRoomSocket(socket);
           if (!completer.isCompleted) {
             completer.complete(
               WatchTogetherCreateResult(code: code, room: room),
             );
           }
-          Future.delayed(const Duration(seconds: 20), () {
-            try {
-              socket.disconnect();
-            } catch (_) {}
-          });
           timeout?.cancel();
         },
       );
@@ -207,12 +215,8 @@ class WatchTogetherService {
           final room = roomData is Map
               ? WatchTogetherState.fromJson(Map<String, dynamic>.from(roomData))
               : null;
+          _keepRoomSocket(socket);
           if (!completer.isCompleted) completer.complete(room);
-          Future.delayed(const Duration(seconds: 2), () {
-            try {
-              socket.disconnect();
-            } catch (_) {}
-          });
           timeout?.cancel();
         },
       );
