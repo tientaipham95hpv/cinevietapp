@@ -12,7 +12,7 @@ import 'core/widgets/adaptive_scaffold.dart';
 import 'core/widgets/desktop_drag_scroll.dart';
 import 'core/widgets/update_prompt.dart';
 import 'features/home/home_screen.dart';
-import 'features/search/search_browse_screen.dart';
+import 'features/watch_together/watch_together_screen.dart';
 import 'features/my/my_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'features/history/history_screen.dart';
@@ -52,7 +52,7 @@ class CineVietApp extends StatelessWidget {
           child: AdaptiveScaffold(
             children: [
               HomeScreen(),
-              SearchBrowseScreen(),
+              WatchTogetherScreen(),
               MyScreen(),
               HistoryScreen(),
               ProfileScreen(),

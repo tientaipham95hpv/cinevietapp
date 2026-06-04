@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../platform/platform_detector.dart';
 import '../theme/cineviet_colors.dart';
 import '../theme/cineviet_dimensions.dart';
+import '../../features/search/search_browse_screen.dart';
 import 'cineviet_logo.dart';
 import 'tv_focus.dart';
 
@@ -14,7 +15,7 @@ class CineVietDestination {
 
 const cineVietDestinations = [
   CineVietDestination(icon: Icons.home_rounded, label: 'Trang chủ'),
-  CineVietDestination(icon: Icons.search_rounded, label: 'Tìm kiếm'),
+  CineVietDestination(icon: Icons.groups_rounded, label: 'Xem chung'),
   CineVietDestination(icon: Icons.favorite_rounded, label: 'Yêu thích'),
   CineVietDestination(icon: Icons.playlist_play_rounded, label: 'Playlist'),
   CineVietDestination(icon: Icons.person_rounded, label: 'Cá nhân'),
@@ -38,6 +39,12 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     setState(() => _index = value);
   }
 
+  void _openSearch() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SearchBrowseScreen()));
+  }
+
   @override
   Widget build(BuildContext context) {
     final platform = PlatformDetector.of(context);
@@ -51,7 +58,16 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
 
   Widget _mobile(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: widget.children),
+      body: Stack(
+        children: [
+          IndexedStack(index: _index, children: widget.children),
+          Positioned(
+            right: CineVietSpacing.md,
+            top: MediaQuery.of(context).padding.top + CineVietSpacing.sm,
+            child: _glassButton(icon: Icons.search_rounded, onTap: _openSearch),
+          ),
+        ],
+      ),
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(
           border: Border(top: BorderSide(color: CineVietColors.border)),
@@ -151,12 +167,22 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                 Positioned(
                   right: CineVietSpacing.lg,
                   top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
-                  child: _glassButton(
-                    icon: _tvRailExpanded
-                        ? Icons.keyboard_double_arrow_left_rounded
-                        : Icons.keyboard_double_arrow_right_rounded,
-                    onTap: () =>
-                        setState(() => _tvRailExpanded = !_tvRailExpanded),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _glassButton(
+                        icon: Icons.search_rounded,
+                        onTap: _openSearch,
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
+                      _glassButton(
+                        icon: _tvRailExpanded
+                            ? Icons.keyboard_double_arrow_left_rounded
+                            : Icons.keyboard_double_arrow_right_rounded,
+                        onTap: () =>
+                            setState(() => _tvRailExpanded = !_tvRailExpanded),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -176,7 +202,19 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             child: _sidePanel(expanded: true, tvMode: false),
           ),
           Expanded(
-            child: IndexedStack(index: _index, children: widget.children),
+            child: Stack(
+              children: [
+                IndexedStack(index: _index, children: widget.children),
+                Positioned(
+                  right: CineVietSpacing.lg,
+                  top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
+                  child: _glassButton(
+                    icon: Icons.search_rounded,
+                    onTap: _openSearch,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
