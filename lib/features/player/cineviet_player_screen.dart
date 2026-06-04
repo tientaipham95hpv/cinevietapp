@@ -160,18 +160,6 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _revealControls();
   }
 
-  Future<void> _deleteWatchRoomManually() async {
-    if (!_isWatchTogether || !_isWatchHost) return;
-    await WatchTogetherService.deleteActiveRoom();
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Đã xoá phòng xem chung.')));
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
-  }
-
   Future<void> _applyWatchRoomSync(WatchTogetherState state) async {
     if (!_isWatchTogether || _isWatchHost) return;
     final controller = _controller;
@@ -885,11 +873,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             ? _WatchTogetherChatPanel(
                 key: const ValueKey('watch-chat-panel'),
                 code: code,
-                isHost: _isWatchHost,
                 messages: _watchMessages,
                 inputController: _watchChatController,
                 onSend: _sendWatchMessage,
-                onDeleteRoom: _deleteWatchRoomManually,
                 onHide: () => setState(() => _watchChatVisible = false),
               )
             : Align(
@@ -1377,20 +1363,16 @@ class _WatchTogetherChatPanel extends StatelessWidget {
   const _WatchTogetherChatPanel({
     super.key,
     required this.code,
-    required this.isHost,
     required this.messages,
     required this.inputController,
     required this.onSend,
-    required this.onDeleteRoom,
     required this.onHide,
   });
 
   final String code;
-  final bool isHost;
   final List<WatchTogetherMessage> messages;
   final TextEditingController inputController;
   final VoidCallback onSend;
-  final Future<void> Function() onDeleteRoom;
   final VoidCallback onHide;
 
   @override
@@ -1462,15 +1444,6 @@ class _WatchTogetherChatPanel extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (isHost)
-                      IconButton(
-                        onPressed: onDeleteRoom,
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          color: Color(0xFFFF7A7A),
-                        ),
-                        tooltip: 'Xoá phòng',
-                      ),
                     IconButton(
                       onPressed: onHide,
                       icon: const Icon(
