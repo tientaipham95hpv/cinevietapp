@@ -767,18 +767,21 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         padding: const EdgeInsets.all(14),
         child: TvFocus(
           onTap: _toggleLock,
+          autofocus: true,
           borderRadius: BorderRadius.circular(CineVietRadius.full),
-          child: IconButton.filledTonal(
-            onPressed: _toggleLock,
-            tooltip: 'Mở khoá',
-            icon: const Icon(Icons.lock_open_rounded),
-            style: IconButton.styleFrom(
-              backgroundColor: Colors.black.withValues(alpha: 0.62),
-              foregroundColor: CineVietColors.accent,
-              side: BorderSide(
+          child: Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.62),
+              shape: BoxShape.circle,
+              border: Border.all(
                 color: CineVietColors.accent.withValues(alpha: 0.55),
               ),
-              minimumSize: const Size.square(46),
+            ),
+            child: const Icon(
+              Icons.lock_open_rounded,
+              color: CineVietColors.accent,
             ),
           ),
         ),
@@ -914,58 +917,80 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                 ],
               ),
               const SizedBox(height: 6),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
+              FocusTraversalGroup(
+                policy: OrderedTraversalPolicy(),
                 child: SizedBox(
                   width: MediaQuery.of(context).size.width - 56,
                   child: Row(
                     children: [
-                      _PlayerRoundButton(
-                        icon: Icons.playlist_play_rounded,
-                        label: 'Server / Tập',
-                        onTap: () => _showServerEpisodeSheet(),
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(1),
+                        child: _PlayerRoundButton(
+                          icon: Icons.playlist_play_rounded,
+                          label: 'Server / Tập',
+                          onTap: () => _showServerEpisodeSheet(),
+                        ),
                       ),
                       const Spacer(),
-                      _PlayerRoundButton(
-                        icon: Icons.skip_previous_rounded,
-                        label: 'Tập trước',
-                        onTap: _playPreviousEpisode,
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(2),
+                        child: _PlayerRoundButton(
+                          icon: Icons.skip_previous_rounded,
+                          label: 'Tập trước',
+                          onTap: _playPreviousEpisode,
+                        ),
                       ),
                       const SizedBox(width: CineVietSpacing.sm),
-                      _PlayerRoundButton(
-                        icon: Icons.replay_10_rounded,
-                        label: 'Lùi 10s',
-                        onTap: () => _seekBy(const Duration(seconds: -10)),
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(3),
+                        child: _PlayerRoundButton(
+                          icon: Icons.replay_10_rounded,
+                          label: 'Lùi 10s',
+                          onTap: () => _seekBy(const Duration(seconds: -10)),
+                        ),
                       ),
                       const SizedBox(width: CineVietSpacing.sm),
-                      _PlayerRoundButton(
-                        icon: value.isPlaying
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        label: value.isPlaying ? 'Tạm dừng' : 'Phát',
-                        primary: true,
-                        large: true,
-                        onTap: _togglePlay,
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(4),
+                        child: _PlayerRoundButton(
+                          icon: value.isPlaying
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          label: value.isPlaying ? 'Tạm dừng' : 'Phát',
+                          primary: true,
+                          large: true,
+                          autofocus: true,
+                          onTap: _togglePlay,
+                        ),
                       ),
                       const SizedBox(width: CineVietSpacing.sm),
-                      _PlayerRoundButton(
-                        icon: Icons.forward_10_rounded,
-                        label: 'Tới 10s',
-                        onTap: () => _seekBy(const Duration(seconds: 10)),
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(5),
+                        child: _PlayerRoundButton(
+                          icon: Icons.forward_10_rounded,
+                          label: 'Tới 10s',
+                          onTap: () => _seekBy(const Duration(seconds: 10)),
+                        ),
                       ),
                       const SizedBox(width: CineVietSpacing.sm),
-                      _PlayerRoundButton(
-                        icon: Icons.skip_next_rounded,
-                        label: 'Tập sau',
-                        onTap: _playNextEpisode,
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(6),
+                        child: _PlayerRoundButton(
+                          icon: Icons.skip_next_rounded,
+                          label: 'Tập sau',
+                          onTap: _playNextEpisode,
+                        ),
                       ),
                       const Spacer(),
-                      _PlayerRoundButton(
-                        icon: _fitToScreen
-                            ? Icons.fullscreen_exit_rounded
-                            : Icons.fullscreen_rounded,
-                        label: _fitToScreen ? 'Fit gốc' : 'Fit màn hình',
-                        onTap: _toggleFullscreenFit,
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(7),
+                        child: _PlayerRoundButton(
+                          icon: _fitToScreen
+                              ? Icons.fullscreen_exit_rounded
+                              : Icons.fullscreen_rounded,
+                          label: _fitToScreen ? 'Fit gốc' : 'Fit màn hình',
+                          onTap: _toggleFullscreenFit,
+                        ),
                       ),
                     ],
                   ),
@@ -1093,31 +1118,28 @@ class _EpisodeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TvFocus(
-      onTap: onTap,
+      onTap: selected ? null : onTap,
       borderRadius: BorderRadius.circular(CineVietRadius.full),
-      child: InkWell(
-        onTap: selected ? null : onTap,
-        borderRadius: BorderRadius.circular(CineVietRadius.full),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
+      enabled: !selected,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected
+              ? CineVietColors.accent
+              : Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(CineVietRadius.full),
+          border: Border.all(
             color: selected
                 ? CineVietColors.accent
-                : Colors.white.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(CineVietRadius.full),
-            border: Border.all(
-              color: selected
-                  ? CineVietColors.accent
-                  : Colors.white.withValues(alpha: 0.14),
-            ),
+                : Colors.white.withValues(alpha: 0.14),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? const Color(0xFF061A13) : Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? const Color(0xFF061A13) : Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
           ),
         ),
       ),
@@ -1154,10 +1176,7 @@ class _PlayerTopBar extends StatelessWidget {
           TvFocus(
             onTap: onBack,
             borderRadius: BorderRadius.circular(CineVietRadius.full),
-            child: IconButton.filledTonal(
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
+            child: _PlayerIconPill(icon: Icons.arrow_back_rounded),
           ),
           const SizedBox(width: CineVietSpacing.md),
           Expanded(
@@ -1208,14 +1227,30 @@ class _PlayerTopBar extends StatelessWidget {
           TvFocus(
             onTap: onLock,
             borderRadius: BorderRadius.circular(CineVietRadius.full),
-            child: IconButton.filledTonal(
-              onPressed: onLock,
-              tooltip: 'Khoá màn hình',
-              icon: const Icon(Icons.lock_rounded),
-            ),
+            child: _PlayerIconPill(icon: Icons.lock_rounded),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PlayerIconPill extends StatelessWidget {
+  const _PlayerIconPill({required this.icon});
+
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.18)),
+      ),
+      child: Icon(icon, color: Colors.white, size: 25),
     );
   }
 }
@@ -1227,6 +1262,7 @@ class _PlayerRoundButton extends StatelessWidget {
     required this.onTap,
     this.primary = false,
     this.large = false,
+    this.autofocus = false,
   });
 
   final IconData icon;
@@ -1234,6 +1270,7 @@ class _PlayerRoundButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool primary;
   final bool large;
+  final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
@@ -1242,38 +1279,32 @@ class _PlayerRoundButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(CineVietRadius.full),
       scale: 1.07,
+      autofocus: autofocus,
       child: Tooltip(
         message: label,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(CineVietRadius.full),
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: primary
+                ? CineVietColors.accent
+                : Colors.white.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+            border: Border.all(
               color: primary
                   ? CineVietColors.accent
-                  : Colors.white.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: primary
-                    ? CineVietColors.accent
-                    : Colors.white.withValues(alpha: 0.18),
-              ),
-              boxShadow: primary
-                  ? const [
-                      BoxShadow(
-                        color: CineVietColors.accentGlow,
-                        blurRadius: 22,
-                      ),
-                    ]
-                  : null,
+                  : Colors.white.withValues(alpha: 0.18),
             ),
-            child: Icon(
-              icon,
-              color: primary ? CineVietColors.bg : Colors.white,
-              size: large ? 34 : 26,
-            ),
+            boxShadow: primary
+                ? const [
+                    BoxShadow(color: CineVietColors.accentGlow, blurRadius: 22),
+                  ]
+                : null,
+          ),
+          child: Icon(
+            icon,
+            color: primary ? CineVietColors.bg : Colors.white,
+            size: large ? 34 : 26,
           ),
         ),
       ),
