@@ -739,7 +739,7 @@ class _MovieRail extends StatelessWidget {
   Widget build(BuildContext context) {
     if (movies.isEmpty) return const SizedBox.shrink();
     return SizedBox(
-      height: cardWidth * 1.72 + CineVietSpacing.xl,
+      height: cardWidth * 1.5 + 92 + CineVietSpacing.xl,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         clipBehavior: Clip.none,
@@ -781,7 +781,9 @@ class _RealMovieCard extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
+        SizedBox(
+          width: width,
+          height: width * 1.5,
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(CineVietRadius.lg),
@@ -851,19 +853,37 @@ class _RealMovieCard extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: CineVietSpacing.sm),
-        Text(
-          movie.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: CineVietSpacing.xs),
-        Text(
-          movie.metaLine,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 12, color: CineVietColors.muted),
+        SizedBox(
+          height: 92,
+          width: width,
+          child: Padding(
+            padding: const EdgeInsets.only(top: CineVietSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  movie.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: CineVietSpacing.xs),
+                Text(
+                  movie.englishTitleLine,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, color: CineVietColors.textSoft),
+                ),
+                const SizedBox(height: CineVietSpacing.xs),
+                Text(
+                  movie.yearLine,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: CineVietColors.muted),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     ),

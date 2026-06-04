@@ -154,6 +154,8 @@ class Movie {
       : (thumbnail?.isNotEmpty == true ? thumbnail : poster);
   String? get portraitImageUrl => posterUrl;
   String? get landscapeImageUrl => backdropUrl;
+  String get englishTitleLine => (titleEn ?? '').trim().isNotEmpty ? titleEn!.trim() : '—';
+  String get yearLine => releaseYear?.toString() ?? '—';
   String get metaLine => [
     if (releaseYear != null) '$releaseYear',
     if ((quality ?? '').isNotEmpty) quality!,

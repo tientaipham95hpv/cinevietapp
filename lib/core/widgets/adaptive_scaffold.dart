@@ -61,11 +61,15 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       body: Stack(
         children: [
           IndexedStack(index: _index, children: widget.children),
-          Positioned(
-            right: CineVietSpacing.md,
-            top: MediaQuery.of(context).padding.top + CineVietSpacing.sm,
-            child: _glassButton(icon: Icons.search_rounded, onTap: _openSearch),
-          ),
+          if (_index == 0)
+            Positioned(
+              right: CineVietSpacing.md,
+              top: MediaQuery.of(context).padding.top + CineVietSpacing.sm,
+              child: _glassButton(
+                icon: Icons.search_rounded,
+                onTap: _openSearch,
+              ),
+            ),
         ],
       ),
       bottomNavigationBar: DecoratedBox(
@@ -170,11 +174,13 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _glassButton(
-                        icon: Icons.search_rounded,
-                        onTap: _openSearch,
-                      ),
-                      const SizedBox(width: CineVietSpacing.sm),
+                      if (_index == 0) ...[
+                        _glassButton(
+                          icon: Icons.search_rounded,
+                          onTap: _openSearch,
+                        ),
+                        const SizedBox(width: CineVietSpacing.sm),
+                      ],
                       _glassButton(
                         icon: _tvRailExpanded
                             ? Icons.keyboard_double_arrow_left_rounded
@@ -205,14 +211,16 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             child: Stack(
               children: [
                 IndexedStack(index: _index, children: widget.children),
-                Positioned(
-                  right: CineVietSpacing.lg,
-                  top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
-                  child: _glassButton(
-                    icon: Icons.search_rounded,
-                    onTap: _openSearch,
+                if (_index == 0)
+                  Positioned(
+                    right: CineVietSpacing.lg,
+                    top:
+                        MediaQuery.of(context).padding.top + CineVietSpacing.lg,
+                    child: _glassButton(
+                      icon: Icons.search_rounded,
+                      onTap: _openSearch,
+                    ),
                   ),
-                ),
               ],
             ),
           ),

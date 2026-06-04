@@ -5,6 +5,51 @@ import 'package:socket_io_client/socket_io_client.dart' as io;
 
 import '../../data/models/movie.dart';
 
+class WatchTogetherMember {
+  const WatchTogetherMember({required this.id, required this.name});
+  final String id;
+  final String name;
+
+  factory WatchTogetherMember.fromJson(Map<String, dynamic> json) =>
+      WatchTogetherMember(
+        id: '${json['id'] ?? ''}',
+        name: '${json['name'] ?? 'Thành viên'}',
+      );
+}
+
+class WatchTogetherState {
+  const WatchTogetherState({
+    required this.code,
+    required this.movieTitle,
+    required this.videoUrl,
+    required this.members,
+    required this.currentTime,
+    required this.playing,
+  });
+
+  final String code;
+  final String movieTitle;
+  final String videoUrl;
+  final List<WatchTogetherMember> members;
+  final double currentTime;
+  final bool playing;
+
+  factory WatchTogetherState.fromJson(Map<String, dynamic> json) =>
+      WatchTogetherState(
+        code: '${json['code'] ?? ''}',
+        movieTitle: '${json['movieTitle'] ?? 'Phòng xem chung'}',
+        videoUrl: '${json['videoUrl'] ?? ''}',
+        members: ((json['members'] as List?) ?? const [])
+            .whereType<Map>()
+            .map(
+              (e) => WatchTogetherMember.fromJson(Map<String, dynamic>.from(e)),
+            )
+            .toList(),
+        currentTime: double.tryParse('${json['currentTime'] ?? 0}') ?? 0,
+        playing: json['playing'] == true,
+      );
+}
+
 class WatchTogetherRoom {
   const WatchTogetherRoom({
     required this.code,
@@ -28,8 +73,9 @@ class WatchTogetherRoom {
 }
 
 class WatchTogetherCreateResult {
-  const WatchTogetherCreateResult({required this.code});
+  const WatchTogetherCreateResult({required this.code, this.room});
   final String code;
+  final WatchTogetherState? room;
 }
 
 class WatchTogetherService {
@@ -47,7 +93,8 @@ class WatchTogetherService {
 
   static Future<List<WatchTogetherRoom>> publicRooms() async {
     final response = await _dio.get('/watch-party/rooms');
-    final rooms = (response.data is Map ? response.data['rooms'] : null) as List?;
+    final rooms =
+        (response.data is Map ? response.data['rooms'] : null) as List?;
     return (rooms ?? const [])
         .whereType<Map>()
         .map((e) => WatchTogetherRoom.fromJson(Map<String, dynamic>.from(e)))
@@ -96,10 +143,15 @@ class WatchTogetherService {
             finishError('Không tạo được phòng xem chung.');
             return;
           }
+          final roomData = map?['room'];
+          final room = roomData is Map
+              ? WatchTogetherState.fromJson(Map<String, dynamic>.from(roomData))
+              : null;
           if (!completer.isCompleted) {
-            completer.complete(WatchTogetherCreateResult(code: code));
+            completer.complete(
+              WatchTogetherCreateResult(code: code, room: room),
+            );
           }
-          // Giữ socket sống ngắn hạn để phòng không bị xoá ngay khi mở web.
           Future.delayed(const Duration(seconds: 20), () {
             try {
               socket.disconnect();
@@ -110,7 +162,9 @@ class WatchTogetherService {
       );
     });
 
-    socket.onConnectError((error) => finishError('Không kết nối được Xem chung.'));
+    socket.onConnectError(
+      (error) => finishError('Không kết nối được Xem chung.'),
+    );
     socket.onError((error) => finishError('Không kết nối được Xem chung.'));
     timeout = Timer(const Duration(seconds: 15), () {
       finishError('Kết nối Xem chung quá thời gian.');
@@ -119,12 +173,12 @@ class WatchTogetherService {
     return completer.future;
   }
 
-  static Future<void> joinRoom({
+  static Future<WatchTogetherState?> joinRoom({
     required String code,
     required String userName,
   }) async {
     final socket = _connectSocket();
-    final completer = Completer<void>();
+    final completer = Completer<WatchTogetherState?>();
     Timer? timeout;
 
     void finishError(Object error) {
@@ -149,7 +203,11 @@ class WatchTogetherService {
             finishError(error);
             return;
           }
-          if (!completer.isCompleted) completer.complete();
+          final roomData = map?['room'];
+          final room = roomData is Map
+              ? WatchTogetherState.fromJson(Map<String, dynamic>.from(roomData))
+              : null;
+          if (!completer.isCompleted) completer.complete(room);
           Future.delayed(const Duration(seconds: 2), () {
             try {
               socket.disconnect();
@@ -159,7 +217,9 @@ class WatchTogetherService {
         },
       );
     });
-    socket.onConnectError((error) => finishError('Không kết nối được Xem chung.'));
+    socket.onConnectError(
+      (error) => finishError('Không kết nối được Xem chung.'),
+    );
     socket.onError((error) => finishError('Không kết nối được Xem chung.'));
     timeout = Timer(const Duration(seconds: 12), () {
       finishError('Kết nối Xem chung quá thời gian.');

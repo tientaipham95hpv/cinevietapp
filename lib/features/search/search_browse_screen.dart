@@ -133,12 +133,24 @@ class _SearchBrowseScreenState extends ConsumerState<SearchBrowseScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Tìm kiếm',
-                      style: TextStyle(
-                        fontSize: platform.isTv ? 42 : 32,
-                        fontWeight: FontWeight.w900,
-                      ),
+                    Row(
+                      children: [
+                        IconButton.filledTonal(
+                          tooltip: 'Về trang chủ',
+                          onPressed: () => Navigator.of(context).maybePop(),
+                          icon: const Icon(Icons.home_rounded),
+                        ),
+                        const SizedBox(width: CineVietSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'Tìm kiếm',
+                            style: TextStyle(
+                              fontSize: platform.isTv ? 42 : 32,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: CineVietSpacing.xs),
                     _SearchBox(
@@ -446,7 +458,7 @@ class _MovieGridSliver extends StatelessWidget {
         : platform.isTablet
         ? 4
         : 5;
-    final aspect = platform.isMobile ? 0.62 : 0.66;
+    final aspect = platform.isMobile ? 0.52 : 0.56;
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(padding, 0, padding, padding + 90),
       sliver: SliverMainAxisGroup(
@@ -593,7 +605,7 @@ class _BrowseMovieCardState extends State<_BrowseMovieCard> {
                     children: [
                       Text(
                         movie.title,
-                        maxLines: 2,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           fontWeight: FontWeight.w900,
@@ -602,12 +614,23 @@ class _BrowseMovieCardState extends State<_BrowseMovieCard> {
                       ),
                       const SizedBox(height: CineVietSpacing.xs),
                       Text(
-                        movie.metaLine,
+                        movie.englishTitleLine,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: CineVietColors.textSoft,
                           fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: CineVietSpacing.xs),
+                      Text(
+                        movie.yearLine,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: CineVietColors.muted,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],

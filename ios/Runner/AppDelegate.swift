@@ -25,6 +25,13 @@ import UIKit
   private func setupPlayerControlChannel() {
     guard let controller = window?.rootViewController as? FlutterViewController else { return }
 
+    do {
+      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
+      try AVAudioSession.sharedInstance().setActive(true)
+    } catch {
+      // Không để audio-session lỗi làm crash lần mở app đầu tiên trên iOS.
+    }
+
     if volumeView.superview == nil {
       volumeView.alpha = 0.01
       volumeView.isUserInteractionEnabled = false
@@ -34,9 +41,6 @@ import UIKit
         self?.volumeSlider = self?.volumeView.subviews.compactMap { $0 as? UISlider }.first
       }
     }
-
-    try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
-    try? AVAudioSession.sharedInstance().setActive(true)
 
     let channel = FlutterMethodChannel(
       name: "live.cineviet/brightness",

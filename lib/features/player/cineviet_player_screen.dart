@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -269,18 +270,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     });
   }
 
-  void _showGestureHint(String mode, double value) {
+  void _armGestureHideTimer() {
     _gestureHintTimer?.cancel();
-    setState(() {
-      _gestureMode = mode;
-      _gestureValue = value.clamp(0.0, 1.0);
-    });
-    _gestureHintTimer = Timer(const Duration(milliseconds: 850), () {
+    _gestureHintTimer = Timer(const Duration(milliseconds: 820), () {
       if (!mounted) return;
-      setState(() {
-        _gestureMode = null;
-        _gestureValue = null;
-      });
+      setState(() => _gestureMode = null);
     });
   }
 
@@ -331,26 +325,40 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final isLeft = start.dx < size.width / 2;
     if (isLeft) {
       final next = (_screenBrightness + change).clamp(0.05, 1.0);
-      setState(() => _screenBrightness = next);
+      setState(() {
+        _screenBrightness = next;
+        _gestureMode = 'brightness';
+        _gestureValue = next;
+      });
       _setScreenBrightness(next).then((actual) {
         if (!mounted || actual == null) return;
-        setState(() => _screenBrightness = actual);
+        setState(() {
+          _screenBrightness = actual;
+          _gestureValue = actual;
+        });
       });
-      _showGestureHint('brightness', next);
+      _armGestureHideTimer();
     } else {
       final next = (_appVolume + change).clamp(0.0, 1.0);
-      setState(() => _appVolume = next);
+      setState(() {
+        _appVolume = next;
+        _gestureMode = 'volume';
+        _gestureValue = next;
+      });
       try {
         controller.setVolume(next);
       } catch (_) {}
       _setSystemVolume(next).then((actual) {
         if (!mounted || actual == null) return;
-        setState(() => _appVolume = actual);
+        setState(() {
+          _appVolume = actual;
+          _gestureValue = actual;
+        });
         try {
           controller.setVolume(actual);
         } catch (_) {}
       });
-      _showGestureHint('volume', next);
+      _armGestureHideTimer();
     }
     _dragStart = details.localPosition;
   }
@@ -633,8 +641,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                   ),
                 ),
               if (_controlsLocked) _buildLockedButton(),
-              if (_gestureMode != null && _gestureValue != null)
-                _buildGestureHint(),
+              _buildGestureHint(),
               if (_buffering && !_loading) _buildBufferingBadge(),
               if (!_controlsLocked &&
                   (_showControls || _loading || _error != null))
@@ -749,60 +756,120 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         : Icons.volume_up_rounded;
     final label = isBrightness ? 'Độ sáng' : 'Âm lượng';
 
-    return Align(
-      alignment: isBrightness ? Alignment.centerLeft : Alignment.centerRight,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: CineVietSpacing.lg),
-        child: Container(
-          width: 72,
-          height: 250,
-          padding: const EdgeInsets.symmetric(
-            horizontal: CineVietSpacing.sm,
-            vertical: CineVietSpacing.md,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.34),
-            borderRadius: BorderRadius.circular(CineVietRadius.full),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: CineVietColors.accent, size: 24),
-              const SizedBox(height: CineVietSpacing.sm),
-              Expanded(
-                child: RotatedBox(
-                  quarterTurns: -1,
-                  child: ClipRRect(
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: _gestureMode == null ? 0 : 1,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        child: Align(
+          alignment: isBrightness
+              ? Alignment.centerLeft
+              : Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: CineVietSpacing.lg),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(CineVietRadius.full),
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOutCubic,
+                  width: 78,
+                  height: 268,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: CineVietSpacing.sm,
+                    vertical: CineVietSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.46),
                     borderRadius: BorderRadius.circular(CineVietRadius.full),
-                    child: LinearProgressIndicator(
-                      value: value,
-                      minHeight: 10,
-                      backgroundColor: Colors.white24,
-                      color: CineVietColors.accent,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.16),
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: CineVietColors.accent.withValues(alpha: 0.18),
+                        blurRadius: 24,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 160),
+                        child: Icon(
+                          icon,
+                          key: ValueKey(icon),
+                          color: CineVietColors.accent,
+                          size: 26,
+                        ),
+                      ),
+                      const SizedBox(height: CineVietSpacing.sm),
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) => Stack(
+                            alignment: Alignment.bottomCenter,
+                            children: [
+                              Container(
+                                width: 12,
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(
+                                    CineVietRadius.full,
+                                  ),
+                                ),
+                              ),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 110),
+                                curve: Curves.easeOutCubic,
+                                width: 12,
+                                height: constraints.maxHeight * value,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(
+                                    CineVietRadius.full,
+                                  ),
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                    colors: [
+                                      CineVietColors.accent,
+                                      Color(0xFF7FFFD4),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: CineVietSpacing.sm),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 140),
+                        child: Text(
+                          '${(value * 100).round()}%',
+                          key: ValueKey((value * 100).round()),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: CineVietColors.textSoft,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: CineVietSpacing.sm),
-              Text(
-                '${(value * 100).round()}%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: CineVietColors.textSoft,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

@@ -143,8 +143,18 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
   }
 
   void _openWatchTogether() {
+    final server = movie.episodes.isNotEmpty ? movie.episodes.first : null;
+    final episode = server?.items.isNotEmpty == true
+        ? server!.items.first
+        : null;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => WatchTogetherScreen(prefillMovie: movie)),
+      MaterialPageRoute(
+        builder: (_) => WatchTogetherScreen(
+          prefillMovie: movie,
+          prefillServer: server,
+          prefillEpisode: episode,
+        ),
+      ),
     );
   }
 
@@ -204,9 +214,11 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
     final isFavorite = favoriteIds.contains(movie.id);
     final padding = platform.isMobile ? CineVietSpacing.md : CineVietSpacing.xl;
     final heroHeight = platform.isMobile
-        ? 540.0
+        ? 760.0
         : platform.isTablet
-        ? 590.0
+        ? 760.0
+        : platform.isDesktop
+        ? 780.0
         : 700.0;
     final heroImageUrl = platform.isMobile
         ? (movie.portraitImageUrl ?? movie.landscapeImageUrl)
@@ -324,58 +336,19 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                                 ),
                               ),
                               const SizedBox(height: CineVietSpacing.lg),
-                              GridView.count(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                crossAxisCount: platform.isMobile ? 2 : 4,
-                                mainAxisSpacing: CineVietSpacing.sm,
-                                crossAxisSpacing: CineVietSpacing.sm,
-                                childAspectRatio: platform.isMobile ? 3.2 : 3.6,
-                                children: [
-                                  FilledButton.icon(
-                                    onPressed:
-                                        movie.episodes.isEmpty ||
-                                            movie.episodes.first.items.isEmpty
-                                        ? null
-                                        : () => _openEpisode(0, 0),
-                                    icon: const Icon(Icons.play_arrow_rounded),
-                                    label: const Text('Xem ngay'),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: movie.episodes.isEmpty
-                                        ? null
-                                        : _openWatchTogether,
-                                    icon: const Icon(Icons.groups_rounded),
-                                    label: const Text('Xem chung'),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: () =>
-                                        _toggleFavorite(isFavorite),
-                                    icon: Icon(
-                                      isFavorite
-                                          ? Icons.favorite_rounded
-                                          : Icons.favorite_border_rounded,
-                                      color: isFavorite
-                                          ? Colors.redAccent
-                                          : null,
-                                    ),
-                                    label: Text(
-                                      isFavorite ? 'Đã yêu thích' : 'Yêu thích',
-                                    ),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: _showAddToPlaylist,
-                                    icon: const Icon(
-                                      Icons.playlist_add_rounded,
-                                    ),
-                                    label: const Text('Thêm playlist'),
-                                  ),
-                                  OutlinedButton.icon(
-                                    onPressed: _shareMovie,
-                                    icon: const Icon(Icons.ios_share_rounded),
-                                    label: const Text('Chia sẻ'),
-                                  ),
-                                ],
+                              _MovieActionGrid(
+                                isMobile: platform.isMobile,
+                                isTablet: platform.isTablet,
+                                isDesktop: platform.isDesktop,
+                                isFavorite: isFavorite,
+                                canPlay:
+                                    movie.episodes.isNotEmpty &&
+                                    movie.episodes.first.items.isNotEmpty,
+                                onPlay: () => _openEpisode(0, 0),
+                                onWatchTogether: _openWatchTogether,
+                                onFavorite: () => _toggleFavorite(isFavorite),
+                                onPlaylist: _showAddToPlaylist,
+                                onShare: _shareMovie,
                               ),
                             ],
                           ),
@@ -408,6 +381,94 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MovieActionGrid extends StatelessWidget {
+  const _MovieActionGrid({
+    required this.isMobile,
+    required this.isTablet,
+    required this.isDesktop,
+    required this.isFavorite,
+    required this.canPlay,
+    required this.onPlay,
+    required this.onWatchTogether,
+    required this.onFavorite,
+    required this.onPlaylist,
+    required this.onShare,
+  });
+
+  final bool isMobile;
+  final bool isTablet;
+  final bool isDesktop;
+  final bool isFavorite;
+  final bool canPlay;
+  final VoidCallback onPlay;
+  final VoidCallback onWatchTogether;
+  final VoidCallback onFavorite;
+  final VoidCallback onPlaylist;
+  final VoidCallback onShare;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <Widget>[
+      FilledButton.icon(
+        onPressed: canPlay ? onPlay : null,
+        icon: const Icon(Icons.play_arrow_rounded),
+        label: const Text('Xem ngay'),
+      ),
+      OutlinedButton.icon(
+        onPressed: canPlay ? onWatchTogether : null,
+        icon: const Icon(Icons.groups_rounded),
+        label: const Text('Xem chung'),
+      ),
+      OutlinedButton.icon(
+        onPressed: onFavorite,
+        icon: Icon(
+          isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          color: isFavorite ? Colors.redAccent : null,
+        ),
+        label: Text(isFavorite ? 'Đã yêu thích' : 'Yêu thích'),
+      ),
+      OutlinedButton.icon(
+        onPressed: onPlaylist,
+        icon: const Icon(Icons.playlist_add_rounded),
+        label: const Text('Thêm playlist'),
+      ),
+      OutlinedButton.icon(
+        onPressed: onShare,
+        icon: const Icon(Icons.ios_share_rounded),
+        label: const Text('Chia sẻ'),
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = isMobile
+            ? 2
+            : isTablet
+            ? 3
+            : isDesktop
+            ? 3
+            : 4;
+        final itemWidth =
+            (constraints.maxWidth - (crossAxisCount - 1) * CineVietSpacing.sm) /
+            crossAxisCount;
+        return Wrap(
+          spacing: CineVietSpacing.sm,
+          runSpacing: CineVietSpacing.sm,
+          children: actions
+              .map(
+                (child) => SizedBox(
+                  width: itemWidth,
+                  height: isMobile ? 56 : 54,
+                  child: child,
+                ),
+              )
+              .toList(),
+        );
+      },
     );
   }
 }
@@ -1535,7 +1596,7 @@ class _RelatedMovieCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => SizedBox(
     width: 150,
-    height: 220,
+    height: 318,
     child: TvFocus(
       borderRadius: BorderRadius.circular(CineVietRadius.lg),
       onTap: onTap,
@@ -1549,7 +1610,9 @@ class _RelatedMovieCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
+          SizedBox(
+            width: 150,
+            height: 225,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(CineVietRadius.lg),
               child: movie.posterUrl == null
@@ -1567,6 +1630,27 @@ class _RelatedMovieCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: CineVietSpacing.xs),
+          Text(
+            movie.englishTitleLine,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              color: CineVietColors.textSoft,
+            ),
+          ),
+          const SizedBox(height: CineVietSpacing.xs),
+          Text(
+            movie.yearLine,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: CineVietColors.muted,
+            ),
           ),
         ],
       ),
