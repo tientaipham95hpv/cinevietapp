@@ -11,6 +11,8 @@ import '../../data/models/watch_history.dart';
 import '../../data/services/watch_history_service.dart';
 import '../../data/services/cloud_history_service.dart';
 
+enum _PlayerFitMode { contain, cover, stretch }
+
 class CineVietPlayerScreen extends ConsumerStatefulWidget {
   const CineVietPlayerScreen({
     super.key,
@@ -42,7 +44,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   Duration? _pendingSeekPosition;
   bool _switchingEpisode = false;
   bool _controlsLocked = false;
-  bool _fitToScreen = false;
+  _PlayerFitMode _fitMode = _PlayerFitMode.cover;
   double _appVolume = 1.0;
   double _screenBrightness = 1.0;
   Timer? _gestureHintTimer;
@@ -418,12 +420,28 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   void _toggleFullscreenFit() {
     if (!mounted) return;
-    setState(() => _fitToScreen = !_fitToScreen);
-    SystemChrome.setEnabledSystemUIMode(
-      _fitToScreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
-    );
+    setState(() {
+      _fitMode = switch (_fitMode) {
+        _PlayerFitMode.contain => _PlayerFitMode.cover,
+        _PlayerFitMode.cover => _PlayerFitMode.stretch,
+        _PlayerFitMode.stretch => _PlayerFitMode.contain,
+      };
+    });
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     _revealControls();
   }
+
+  String get _fitLabel => switch (_fitMode) {
+    _PlayerFitMode.contain => 'Gốc',
+    _PlayerFitMode.cover => 'Fit đầy',
+    _PlayerFitMode.stretch => 'Kéo đầy',
+  };
+
+  IconData get _fitIcon => switch (_fitMode) {
+    _PlayerFitMode.contain => Icons.fit_screen_rounded,
+    _PlayerFitMode.cover => Icons.fullscreen_rounded,
+    _PlayerFitMode.stretch => Icons.open_in_full_rounded,
+  };
 
   Future<void> _showServerEpisodeSheet() async {
     if (_controlsLocked) return;
@@ -669,22 +687,20 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final aspectRatio = controller.value.aspectRatio == 0
         ? 16 / 9
         : controller.value.aspectRatio;
-    if (_fitToScreen) {
-      return Center(
-        child: FittedBox(
-          fit: BoxFit.cover,
-          child: SizedBox(
-            width: aspectRatio * 1000,
-            height: 1000,
-            child: VideoPlayer(controller),
-          ),
+    final fit = switch (_fitMode) {
+      _PlayerFitMode.contain => BoxFit.contain,
+      _PlayerFitMode.cover => BoxFit.cover,
+      _PlayerFitMode.stretch => BoxFit.fill,
+    };
+    return SizedBox.expand(
+      child: FittedBox(
+        fit: fit,
+        alignment: Alignment.center,
+        child: SizedBox(
+          width: aspectRatio * 1000,
+          height: 1000,
+          child: VideoPlayer(controller),
         ),
-      );
-    }
-    return Center(
-      child: AspectRatio(
-        aspectRatio: aspectRatio,
-        child: VideoPlayer(controller),
       ),
     );
   }
@@ -985,10 +1001,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                       FocusTraversalOrder(
                         order: const NumericFocusOrder(7),
                         child: _PlayerRoundButton(
-                          icon: _fitToScreen
-                              ? Icons.fullscreen_exit_rounded
-                              : Icons.fullscreen_rounded,
-                          label: _fitToScreen ? 'Fit gốc' : 'Fit màn hình',
+                          icon: _fitIcon,
+                          label: _fitLabel,
                           onTap: _toggleFullscreenFit,
                         ),
                       ),

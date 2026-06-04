@@ -50,7 +50,7 @@ workflows:
     environment:
       flutter: stable
       vars:
-        WINDOWS_ZIP_NAME: "CineViet-Windows-1.0.2.zip"
+        WINDOWS_ZIP_NAME: "CineViet-Windows-1.0.3.zip"
     scripts:
       - name: Enable Windows desktop
         script: flutter config --enable-windows-desktop
@@ -59,10 +59,10 @@ workflows:
           flutter clean
           flutter pub get
       - name: Build Windows release
-        script: flutter build windows --release --build-name=1.0.2 --build-number=7055
+        script: flutter build windows --release --build-name=1.0.3 --build-number=7056
       - name: Package Windows portable zip
         script: |
           powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item scripts\register_windows_protocol.ps1 build\windows\x64\runner\Release\Register-CineViet-Google-Login.ps1 -Force; New-Item -ItemType Directory -Force build\windows\package | Out-Null; Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath build\windows\package\$env:WINDOWS_ZIP_NAME -Force"
     artifacts:
-      - build/windows/package/CineViet-Windows-1.0.2.zip
+      - build/windows/package/CineViet-Windows-1.0.3.zip
       - build/windows/x64/runner/Release/**
