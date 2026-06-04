@@ -8,6 +8,7 @@ import '../../core/theme/cineviet_dimensions.dart';
 import '../../core/widgets/tv_focus.dart';
 import '../../data/models/movie.dart';
 import '../../data/models/watch_history.dart';
+import '../../data/repositories/movie_repository.dart';
 import '../../data/services/watch_history_service.dart';
 import '../../data/services/cloud_history_service.dart';
 
@@ -467,6 +468,38 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             ),
           );
         },
+        onSelectPart: _switchMoviePart,
+      ),
+    );
+  }
+
+  Future<void> _switchMoviePart(MoviePart part) async {
+    if (_controlsLocked || part.id == widget.movie.id) return;
+    _revealControls();
+    Movie nextMovie;
+    try {
+      nextMovie = await ref
+          .read(movieRepositoryProvider)
+          .detail(part.id.toString());
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chưa tải được phần phim này.')),
+      );
+      return;
+    }
+    if (!mounted || nextMovie.episodes.isEmpty) return;
+    final server = nextMovie.episodes.first;
+    if (server.items.isEmpty) return;
+    _switchingEpisode = true;
+    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => CineVietPlayerScreen(
+          movie: nextMovie,
+          server: server,
+          episode: server.items.first,
+        ),
       ),
     );
   }
@@ -1024,12 +1057,14 @@ class _ServerEpisodeSheet extends StatelessWidget {
     required this.currentServer,
     required this.currentEpisode,
     required this.onSelect,
+    required this.onSelectPart,
   });
 
   final Movie movie;
   final EpisodeServer currentServer;
   final EpisodeItem currentEpisode;
   final void Function(EpisodeServer server, EpisodeItem episode) onSelect;
+  final void Function(MoviePart part) onSelectPart;
 
   bool _isCurrent(EpisodeServer server, EpisodeItem episode) {
     return server.name == currentServer.name &&
@@ -1041,6 +1076,7 @@ class _ServerEpisodeSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final servers = movie.episodes;
+    final parts = movie.parts;
     return SafeArea(
       top: false,
       child: Container(
@@ -1075,7 +1111,35 @@ class _ServerEpisodeSheet extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            if (parts.length > 1) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Phần phim',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final part in parts) ...[
+                      _EpisodeChip(
+                        label: 'Phần ${part.partNumber}',
+                        selected: part.id == movie.id,
+                        onTap: () => onSelectPart(part),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ] else
+              const SizedBox(height: 8),
             Expanded(
               child: ListView.separated(
                 itemCount: servers.length,

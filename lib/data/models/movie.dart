@@ -59,6 +59,20 @@ String _normalizeEpisodeName(String value) {
   return text;
 }
 
+class MoviePart {
+  const MoviePart({required this.id, required this.title, this.partNumber = 1});
+
+  final int id;
+  final String title;
+  final int partNumber;
+
+  factory MoviePart.fromJson(Map<String, dynamic> json) => MoviePart(
+    id: int.tryParse('${json['id'] ?? 0}') ?? 0,
+    title: '${json['title'] ?? ''}',
+    partNumber: int.tryParse('${json['part_number'] ?? 1}') ?? 1,
+  );
+}
+
 class EpisodeServer {
   const EpisodeServer({required this.name, required this.items});
   final String name;
@@ -105,6 +119,7 @@ class Movie {
     this.directors = const [],
     this.episodes = const [],
     this.related = const [],
+    this.parts = const [],
   });
 
   final int id;
@@ -129,6 +144,7 @@ class Movie {
   final List<MoviePerson> directors;
   final List<EpisodeServer> episodes;
   final List<Movie> related;
+  final List<MoviePart> parts;
 
   String? get posterUrl => poster?.isNotEmpty == true
       ? poster
@@ -234,6 +250,11 @@ class Movie {
       related: ((json['related'] as List?) ?? const [])
           .whereType<Map>()
           .map((e) => Movie.fromJson(Map<String, dynamic>.from(e)))
+          .toList(),
+      parts: ((json['parts'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => MoviePart.fromJson(Map<String, dynamic>.from(e)))
+          .where((e) => e.id > 0)
           .toList(),
     );
   }
