@@ -17,6 +17,30 @@ class WatchTogetherMember {
       );
 }
 
+class WatchTogetherMessage {
+  const WatchTogetherMessage({
+    required this.id,
+    required this.type,
+    required this.payload,
+    this.userName,
+  });
+
+  final String id;
+  final String type;
+  final String payload;
+  final String? userName;
+
+  bool get isSystem => type == 'system';
+
+  factory WatchTogetherMessage.fromJson(Map<String, dynamic> json) =>
+      WatchTogetherMessage(
+        id: '${json['id'] ?? DateTime.now().millisecondsSinceEpoch}',
+        type: '${json['type'] ?? 'text'}',
+        payload: '${json['payload'] ?? ''}',
+        userName: json['userName']?.toString(),
+      );
+}
+
 class WatchTogetherState {
   const WatchTogetherState({
     required this.code,
@@ -25,6 +49,7 @@ class WatchTogetherState {
     required this.members,
     required this.currentTime,
     required this.playing,
+    required this.messages,
   });
 
   final String code;
@@ -33,21 +58,25 @@ class WatchTogetherState {
   final List<WatchTogetherMember> members;
   final double currentTime;
   final bool playing;
+  final List<WatchTogetherMessage> messages;
 
-  factory WatchTogetherState.fromJson(Map<String, dynamic> json) =>
-      WatchTogetherState(
-        code: '${json['code'] ?? ''}',
-        movieTitle: '${json['movieTitle'] ?? 'Phòng xem chung'}',
-        videoUrl: '${json['videoUrl'] ?? ''}',
-        members: ((json['members'] as List?) ?? const [])
-            .whereType<Map>()
-            .map(
-              (e) => WatchTogetherMember.fromJson(Map<String, dynamic>.from(e)),
-            )
-            .toList(),
-        currentTime: double.tryParse('${json['currentTime'] ?? 0}') ?? 0,
-        playing: json['playing'] == true,
-      );
+  factory WatchTogetherState.fromJson(
+    Map<String, dynamic> json,
+  ) => WatchTogetherState(
+    code: '${json['code'] ?? ''}',
+    movieTitle: '${json['movieTitle'] ?? 'Phòng xem chung'}',
+    videoUrl: '${json['videoUrl'] ?? ''}',
+    members: ((json['members'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => WatchTogetherMember.fromJson(Map<String, dynamic>.from(e)))
+        .toList(),
+    currentTime: double.tryParse('${json['currentTime'] ?? 0}') ?? 0,
+    playing: json['playing'] == true,
+    messages: ((json['messages'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => WatchTogetherMessage.fromJson(Map<String, dynamic>.from(e)))
+        .toList(),
+  );
 }
 
 class WatchTogetherRoom {
@@ -91,6 +120,8 @@ class WatchTogetherService {
     ),
   );
   static io.Socket? _activeRoomSocket;
+
+  static io.Socket? get activeRoomSocket => _activeRoomSocket;
 
   static void _keepRoomSocket(io.Socket socket) {
     final previous = _activeRoomSocket;
@@ -236,6 +267,15 @@ class WatchTogetherService {
     final uri = Uri.parse('$baseUrl/xem-chung/phong/$code');
     if (userName == null || userName.trim().isEmpty) return uri.toString();
     return uri.replace(queryParameters: {'name': userName.trim()}).toString();
+  }
+
+  static void sendMessage(String text) {
+    final message = text.trim();
+    final socket = _activeRoomSocket;
+    if (message.isEmpty || socket == null || socket.disconnected == true) {
+      return;
+    }
+    socket.emitWithAck('chat-message', {'text': message});
   }
 
   static String? firstPlayableUrl(Movie movie) {

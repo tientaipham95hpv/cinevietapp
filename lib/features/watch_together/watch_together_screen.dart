@@ -73,6 +73,8 @@ class _WatchTogetherScreenState extends ConsumerState<WatchTogetherScreen> {
             movie: movie,
             server: server,
             episode: episode,
+            watchTogetherState: room,
+            watchTogetherCode: code,
           ),
         ),
       );

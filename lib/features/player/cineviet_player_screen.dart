@@ -12,6 +12,7 @@ import '../../data/models/watch_history.dart';
 import '../../data/repositories/movie_repository.dart';
 import '../../data/services/watch_history_service.dart';
 import '../../data/services/cloud_history_service.dart';
+import '../../core/services/watch_together_service.dart';
 
 enum _PlayerFitMode { contain, cover, stretch }
 
@@ -21,10 +22,14 @@ class CineVietPlayerScreen extends ConsumerStatefulWidget {
     required this.movie,
     required this.server,
     required this.episode,
+    this.watchTogetherState,
+    this.watchTogetherCode,
   });
   final Movie movie;
   final EpisodeServer server;
   final EpisodeItem episode;
+  final WatchTogetherState? watchTogetherState;
+  final String? watchTogetherCode;
 
   @override
   ConsumerState<CineVietPlayerScreen> createState() =>
@@ -54,6 +59,18 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   Timer? _progressTimer;
   Timer? _seekHintTimer;
   WatchHistoryItem? _resumeItem;
+  bool _watchChatVisible = true;
+  final List<WatchTogetherMessage> _watchMessages = [];
+  final TextEditingController _watchChatController = TextEditingController();
+
+  bool get _isWatchTogether => _watchRoomCode != null;
+  String? get _watchRoomCode {
+    final code = widget.watchTogetherCode?.trim().toUpperCase();
+    if (code != null && code.isNotEmpty) return code;
+    final stateCode = widget.watchTogetherState?.code.trim().toUpperCase();
+    if (stateCode != null && stateCode.isNotEmpty) return stateCode;
+    return null;
+  }
 
   String get _streamUrl => widget.episode.linkM3u8?.isNotEmpty == true
       ? widget.episode.linkM3u8!
@@ -70,9 +87,47 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       DeviceOrientation.landscapeRight,
     ]);
     HardwareKeyboard.instance.addHandler(_handleRemoteKey);
+    _watchMessages.addAll(widget.watchTogetherState?.messages ?? const []);
+    _bindWatchTogetherSocket();
     _loadScreenBrightness();
     _loadSystemVolume();
     _initPlayer();
+  }
+
+  void _bindWatchTogetherSocket() {
+    final socket = WatchTogetherService.activeRoomSocket;
+    if (!_isWatchTogether || socket == null) return;
+    socket.off('room-state');
+    socket.off('chat-message');
+    socket.on('room-state', (data) {
+      if (!mounted || data is! Map) return;
+      final state = WatchTogetherState.fromJson(
+        Map<String, dynamic>.from(data),
+      );
+      setState(() {
+        _watchMessages
+          ..clear()
+          ..addAll(state.messages);
+      });
+    });
+    socket.on('chat-message', (data) {
+      if (!mounted || data is! Map) return;
+      final message = WatchTogetherMessage.fromJson(
+        Map<String, dynamic>.from(data),
+      );
+      setState(() {
+        final exists = _watchMessages.any((m) => m.id == message.id);
+        if (!exists) _watchMessages.add(message);
+      });
+    });
+  }
+
+  void _sendWatchMessage() {
+    final text = _watchChatController.text.trim();
+    if (text.isEmpty) return;
+    WatchTogetherService.sendMessage(text);
+    _watchChatController.clear();
+    _revealControls();
   }
 
   Future<void> _initPlayer() async {
@@ -146,6 +201,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _progressTimer?.cancel();
     _seekHintTimer?.cancel();
     _gestureHintTimer?.cancel();
+    _watchChatController.dispose();
     _saveProgress();
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
     _controller?.removeListener(_syncPlayerState);
@@ -643,12 +699,50 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
               if (_controlsLocked) _buildLockedButton(),
               _buildGestureHint(),
               if (_buffering && !_loading) _buildBufferingBadge(),
+              if (_isWatchTogether) _buildWatchTogetherChatPanel(),
               if (!_controlsLocked &&
                   (_showControls || _loading || _error != null))
                 _buildOverlay(context),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWatchTogetherChatPanel() {
+    final code = _watchRoomCode ?? '';
+    final width = MediaQuery.of(context).size.width;
+    final isCompact = width < 720;
+    final panelWidth = isCompact ? width * 0.48 : 360.0;
+    final top = isCompact ? 16.0 : 24.0;
+    final right = isCompact ? 12.0 : 24.0;
+
+    return Positioned(
+      top: top,
+      right: right,
+      bottom: isCompact ? 84.0 : 110.0,
+      width: panelWidth.clamp(260.0, 380.0),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: _watchChatVisible
+            ? _WatchTogetherChatPanel(
+                key: const ValueKey('watch-chat-panel'),
+                code: code,
+                messages: _watchMessages,
+                inputController: _watchChatController,
+                onSend: _sendWatchMessage,
+                onHide: () => setState(() => _watchChatVisible = false),
+              )
+            : Align(
+                key: const ValueKey('watch-chat-toggle'),
+                alignment: Alignment.topRight,
+                child: _WatchChatToggleButton(
+                  code: code,
+                  count: _watchMessages.length,
+                  onTap: () => setState(() => _watchChatVisible = true),
+                ),
+              ),
       ),
     );
   }
@@ -1114,6 +1208,273 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _WatchTogetherChatPanel extends StatelessWidget {
+  const _WatchTogetherChatPanel({
+    super.key,
+    required this.code,
+    required this.messages,
+    required this.inputController,
+    required this.onSend,
+    required this.onHide,
+  });
+
+  final String code;
+  final List<WatchTogetherMessage> messages;
+  final TextEditingController inputController;
+  final VoidCallback onSend;
+  final VoidCallback onHide;
+
+  @override
+  Widget build(BuildContext context) {
+    final recentMessages = messages.length > 80
+        ? messages.sublist(messages.length - 80)
+        : messages;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.58),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black54,
+                blurRadius: 32,
+                offset: Offset(0, 16),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 8, 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: CineVietColors.accent.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.groups_rounded,
+                        color: CineVietColors.accent,
+                        size: 19,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Chat xem chung',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            'Mã phòng: $code',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: CineVietColors.accent,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: onHide,
+                      icon: const Icon(
+                        Icons.keyboard_arrow_right_rounded,
+                        color: Colors.white,
+                      ),
+                      tooltip: 'Ẩn chat',
+                    ),
+                  ],
+                ),
+              ),
+              Divider(color: Colors.white.withValues(alpha: 0.10), height: 1),
+              Expanded(
+                child: recentMessages.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'Chưa có tin nhắn',
+                          style: TextStyle(color: CineVietColors.textSoft),
+                        ),
+                      )
+                    : ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        itemCount: recentMessages.length,
+                        itemBuilder: (context, index) {
+                          final message =
+                              recentMessages[recentMessages.length - 1 - index];
+                          return _WatchMessageBubble(message: message);
+                        },
+                      ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: inputController,
+                        minLines: 1,
+                        maxLines: 2,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => onSend(),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Nhắn tin...',
+                          hintStyle: const TextStyle(
+                            color: CineVietColors.textSoft,
+                          ),
+                          isDense: true,
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.08),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 42,
+                      height: 42,
+                      child: FilledButton(
+                        onPressed: onSend,
+                        style: FilledButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          backgroundColor: CineVietColors.accent,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                        ),
+                        child: const Icon(Icons.send_rounded, size: 19),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WatchMessageBubble extends StatelessWidget {
+  const _WatchMessageBubble({required this.message});
+
+  final WatchTogetherMessage message;
+
+  @override
+  Widget build(BuildContext context) {
+    if (message.isSystem) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          message.payload,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: CineVietColors.textSoft,
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 9),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message.userName?.trim().isNotEmpty == true
+                ? message.userName!.trim()
+                : 'Thành viên',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: CineVietColors.accent,
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            message.payload,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              height: 1.25,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WatchChatToggleButton extends StatelessWidget {
+  const _WatchChatToggleButton({
+    required this.code,
+    required this.count,
+    required this.onTap,
+  });
+
+  final String code;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: onTap,
+      icon: const Icon(Icons.chat_bubble_rounded, size: 18),
+      label: Text('Chat • $code${count > 0 ? ' ($count)' : ''}'),
+      style: FilledButton.styleFrom(
+        backgroundColor: Colors.black.withValues(alpha: 0.62),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(CineVietRadius.full),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+        ),
+      ),
     );
   }
 }
