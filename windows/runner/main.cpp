@@ -1,12 +1,69 @@
 #include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
+#include <shlobj.h>
 #include <windows.h>
+#include <fstream>
 #include <string>
+#include <vector>
 
 #include "flutter_window.h"
 #include "utils.h"
 
 namespace {
+
+bool IsOAuthCallbackArgument(const std::string& argument) {
+  return argument.rfind("cineviet://auth/callback", 0) == 0;
+}
+
+bool HasOAuthCallbackArgument(const std::vector<std::string>& arguments) {
+  for (const auto& argument : arguments) {
+    if (IsOAuthCallbackArgument(argument)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string GetOAuthCallbackArgument(const std::vector<std::string>& arguments) {
+  for (const auto& argument : arguments) {
+    if (IsOAuthCallbackArgument(argument)) {
+      return argument;
+    }
+  }
+  return "";
+}
+
+std::wstring GetCallbackBridgePath() {
+  wchar_t temp_path[MAX_PATH] = {0};
+  if (::GetTempPathW(MAX_PATH, temp_path) == 0) {
+    return L"";
+  }
+  return std::wstring(temp_path) + L"cineviet_oauth_callback.txt";
+}
+
+void WriteCallbackBridgeFile(const std::string& callback_url) {
+  const std::wstring path = GetCallbackBridgePath();
+  if (path.empty()) {
+    return;
+  }
+  std::ofstream file(path, std::ios::out | std::ios::trunc);
+  file << callback_url;
+}
+
+bool BringExistingCineVietWindowToFront() {
+  HWND existing_window = ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"CineViet");
+  if (existing_window == nullptr) {
+    existing_window = ::FindWindowW(nullptr, L"CineViet");
+  }
+  if (existing_window == nullptr) {
+    return false;
+  }
+  if (::IsIconic(existing_window)) {
+    ::ShowWindow(existing_window, SW_RESTORE);
+  }
+  ::SetForegroundWindow(existing_window);
+  return true;
+}
 
 void RegisterCineVietUrlProtocol() {
   wchar_t exe_path[MAX_PATH] = {0};
@@ -63,8 +120,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   flutter::DartProject project(L"data");
 
-  std::vector<std::string> command_line_arguments =
-      GetCommandLineArguments();
+  std::vector<std::string> command_line_arguments = GetCommandLineArguments();
+  if (HasOAuthCallbackArgument(command_line_arguments)) {
+    WriteCallbackBridgeFile(GetOAuthCallbackArgument(command_line_arguments));
+    if (BringExistingCineVietWindowToFront()) {
+      ::CoUninitialize();
+      return EXIT_SUCCESS;
+    }
+  }
 
   project.set_dart_entrypoint_arguments(std::move(command_line_arguments));
 
