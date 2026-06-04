@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
@@ -283,7 +285,9 @@ class AuthController extends StateNotifier<AuthState> {
         scopes: const ['email', 'profile'],
         serverClientId: _googleServerClientId,
       );
-      await google.signOut();
+      if (!Platform.isIOS) {
+        await google.signOut();
+      }
       final account = await google.signIn();
       if (account == null) {
         state = state.copyWith(loading: false, clearError: true);

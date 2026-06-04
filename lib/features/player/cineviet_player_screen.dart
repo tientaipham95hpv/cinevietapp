@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -77,11 +78,25 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     return null;
   }
 
-  String get _streamUrl => widget.episode.linkM3u8?.isNotEmpty == true
+  String get _rawStreamUrl => widget.episode.linkM3u8?.isNotEmpty == true
       ? widget.episode.linkM3u8!
       : widget.episode.linkEmbed?.isNotEmpty == true
       ? widget.episode.linkEmbed!
       : '';
+
+  String get _streamUrl {
+    final raw = _rawStreamUrl.trim();
+    if (raw.isEmpty) return raw;
+    if (Platform.isWindows && raw.startsWith(RegExp(r'https?://'))) {
+      final alreadyProxy =
+          Uri.tryParse(raw)?.host == 'cineviet.live' &&
+          Uri.tryParse(raw)?.path == '/api/stream';
+      if (!alreadyProxy) {
+        return 'https://cineviet.live/api/stream?url=${Uri.encodeComponent(raw)}';
+      }
+    }
+    return raw;
+  }
 
   @override
   void initState() {
