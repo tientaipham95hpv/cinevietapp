@@ -99,7 +99,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
     final proxy =
         'https://cineviet.live/api/stream?url=${Uri.encodeComponent(raw)}';
-    // Windows/media_kit handles many HLS URLs directly. Try the original URL
+    // Native video_player handles many HLS URLs directly. Try the original URL
     // first to avoid proxy stalls, then fall back to CineViet's HLS proxy.
     return [raw, proxy];
   }
