@@ -59,6 +59,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   Timer? _hideTimer;
   Timer? _progressTimer;
   Timer? _seekHintTimer;
+  Timer? _levelApplyTimer;
+  double? _pendingBrightness;
+  double? _pendingVolume;
   WatchHistoryItem? _resumeItem;
   bool _watchChatVisible = true;
   final List<WatchTogetherMessage> _watchMessages = [];
@@ -310,6 +313,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _progressTimer?.cancel();
     _seekHintTimer?.cancel();
     _gestureHintTimer?.cancel();
+    _levelApplyTimer?.cancel();
     _watchChatController.dispose();
     _saveProgress();
     if (_isWatchTogether && _isWatchHost) {
@@ -425,6 +429,50 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     }
   }
 
+  void _scheduleLevelApply() {
+    if (_levelApplyTimer?.isActive ?? false) return;
+    _levelApplyTimer = Timer(
+      const Duration(milliseconds: 70),
+      _applyPendingLevels,
+    );
+  }
+
+  Future<void> _applyPendingLevels({bool settle = false}) async {
+    _levelApplyTimer?.cancel();
+    _levelApplyTimer = null;
+
+    final brightness = _pendingBrightness;
+    final volume = _pendingVolume;
+    _pendingBrightness = null;
+    _pendingVolume = null;
+
+    if (brightness != null) {
+      final actual = await _setScreenBrightness(brightness);
+      if (settle && mounted && actual != null) {
+        setState(() {
+          _screenBrightness = actual;
+          if (_gestureMode == 'brightness') _gestureValue = actual;
+        });
+      }
+    }
+
+    if (volume != null) {
+      try {
+        _controller?.setVolume(volume);
+      } catch (_) {}
+      final actual = await _setSystemVolume(volume);
+      if (settle && mounted && actual != null) {
+        setState(() {
+          _appVolume = actual;
+          if (_gestureMode == 'volume') _gestureValue = actual;
+        });
+        try {
+          _controller?.setVolume(actual);
+        } catch (_) {}
+      }
+    }
+  }
+
   void _showSeekHint(Duration delta, {Duration? target}) {
     _seekHintTimer?.cancel();
     final sign = delta.isNegative ? '−' : '+';
@@ -498,13 +546,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         _gestureMode = 'brightness';
         _gestureValue = next;
       });
-      _setScreenBrightness(next).then((actual) {
-        if (!mounted || actual == null) return;
-        setState(() {
-          _screenBrightness = actual;
-          _gestureValue = actual;
-        });
-      });
+      _pendingBrightness = next;
+      _scheduleLevelApply();
       _armGestureHideTimer();
     } else {
       final next = (_appVolume + change).clamp(0.0, 1.0);
@@ -516,16 +559,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       try {
         controller.setVolume(next);
       } catch (_) {}
-      _setSystemVolume(next).then((actual) {
-        if (!mounted || actual == null) return;
-        setState(() {
-          _appVolume = actual;
-          _gestureValue = actual;
-        });
-        try {
-          controller.setVolume(actual);
-        } catch (_) {}
-      });
+      _pendingVolume = next;
+      _scheduleLevelApply();
       _armGestureHideTimer();
     }
     _dragStart = details.localPosition;
@@ -540,6 +575,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       } catch (_) {}
       _saveProgress();
     }
+    unawaited(_applyPendingLevels(settle: true));
     _dragMode = null;
     _dragStart = null;
     _dragStartPosition = null;
