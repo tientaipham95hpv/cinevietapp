@@ -19,7 +19,9 @@ import 'features/history/history_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  VideoPlayerMediaKit.ensureInitialized(windows: true);
+  if (!kIsWeb && Platform.isWindows) {
+    VideoPlayerMediaKit.ensureInitialized(windows: true);
+  }
   if (!kIsWeb && Platform.isAndroid) {
     try {
       await Firebase.initializeApp();

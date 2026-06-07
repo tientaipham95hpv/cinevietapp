@@ -38,14 +38,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _loadRememberLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _rememberLogin = prefs.getBool('cineviet_remember_login') ?? true;
-      if (_rememberLogin && _email.text.isEmpty) {
-        _email.text = prefs.getString('cineviet_remember_email') ?? '';
-      }
-    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      setState(() {
+        _rememberLogin = prefs.getBool('cineviet_remember_login') ?? true;
+        if (_rememberLogin && _email.text.isEmpty) {
+          _email.text = prefs.getString('cineviet_remember_email') ?? '';
+        }
+      });
+    } catch (_) {
+      // First-launch storage issues must not crash the profile/login screen.
+    }
   }
 
   @override

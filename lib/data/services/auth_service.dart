@@ -147,16 +147,30 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<String?> _readToken(String key) async {
-    final secureValue = await _storage.read(key: key);
-    if (secureValue != null && secureValue.isNotEmpty) return secureValue;
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(key);
+    try {
+      final secureValue = await _storage.read(key: key);
+      if (secureValue != null && secureValue.isNotEmpty) return secureValue;
+    } catch (_) {
+      // Keychain/secure-storage can fail on first iOS launch; fall back below.
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(key);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _writeToken(String key, String value) async {
-    await _storage.write(key: key, value: value);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(key, value);
+    try {
+      await _storage.write(key: key, value: value);
+    } catch (_) {
+      // Keep login usable even when secure storage is temporarily unavailable.
+    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, value);
+    } catch (_) {}
   }
 
   Future<void> _bootstrap() async {
@@ -183,13 +197,15 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _setRememberPreference(bool remember, String email) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_rememberLoginKey, remember);
-    if (remember) {
-      await prefs.setString(_rememberEmailKey, email.trim());
-    } else {
-      await prefs.remove(_rememberEmailKey);
-    }
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_rememberLoginKey, remember);
+      if (remember) {
+        await prefs.setString(_rememberEmailKey, email.trim());
+      } else {
+        await prefs.remove(_rememberEmailKey);
+      }
+    } catch (_) {}
   }
 
   Future<void> _saveSession(Map<String, dynamic> data) async {
