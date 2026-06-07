@@ -374,6 +374,27 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _armHideTimer();
   }
 
+  Future<void> _openExternalPlayer() async {
+    if (!Platform.isAndroid) return;
+    final url = _rawStreamUrl.trim();
+    if (url.isEmpty) return;
+    bool? opened;
+    try {
+      opened = await _brightnessChannel.invokeMethod<bool>(
+        'openExternalPlayer',
+        {'url': url, 'title': widget.movie.title},
+      );
+    } catch (_) {
+      opened = false;
+    }
+    if (!mounted || opened == true) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Chưa tìm thấy VLC/MX Player hoặc trình phát ngoài.'),
+      ),
+    );
+  }
+
   String _friendlyPlaybackError(Object? error) {
     final text = '$error';
     final lower = text.toLowerCase();
@@ -998,14 +1019,31 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                 ),
               ),
               const SizedBox(height: CineVietSpacing.lg),
-              TvFocus(
-                onTap: () => Navigator.of(context).maybePop(),
-                borderRadius: BorderRadius.circular(CineVietRadius.full),
-                child: FilledButton.icon(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  label: const Text('Quay lại'),
-                ),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: CineVietSpacing.sm,
+                runSpacing: CineVietSpacing.sm,
+                children: [
+                  if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
+                    TvFocus(
+                      onTap: _openExternalPlayer,
+                      borderRadius: BorderRadius.circular(CineVietRadius.full),
+                      child: FilledButton.icon(
+                        onPressed: _openExternalPlayer,
+                        icon: const Icon(Icons.open_in_new_rounded),
+                        label: const Text('Mở bằng VLC/MX'),
+                      ),
+                    ),
+                  TvFocus(
+                    onTap: () => Navigator.of(context).maybePop(),
+                    borderRadius: BorderRadius.circular(CineVietRadius.full),
+                    child: OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      label: const Text('Quay lại'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1392,8 +1430,19 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                         ),
                       ),
                       const Spacer(),
+                      if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
+                        FocusTraversalOrder(
+                          order: const NumericFocusOrder(7),
+                          child: _PlayerRoundButton(
+                            icon: Icons.open_in_new_rounded,
+                            label: 'VLC/MX',
+                            onTap: _openExternalPlayer,
+                          ),
+                        ),
+                      if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
+                        const SizedBox(width: CineVietSpacing.sm),
                       FocusTraversalOrder(
-                        order: const NumericFocusOrder(7),
+                        order: const NumericFocusOrder(8),
                         child: _PlayerRoundButton(
                           icon: _fitIcon,
                           label: _fitLabel,

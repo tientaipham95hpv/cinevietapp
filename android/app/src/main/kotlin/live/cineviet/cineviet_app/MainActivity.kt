@@ -1,7 +1,10 @@
 package live.cineviet.cineviet_app
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.content.Intent
 import android.media.AudioManager
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.view.WindowManager
@@ -30,6 +33,15 @@ class MainActivity : FlutterActivity() {
                     val target = Math.round((value * max).toFloat()).coerceIn(0, max)
                     audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
                     result.success(currentMusicVolume())
+                }
+                "openExternalPlayer" -> {
+                    val url = call.argument<String>("url")?.trim().orEmpty()
+                    val title = call.argument<String>("title")?.trim().orEmpty()
+                    if (url.isEmpty()) {
+                        result.error("missing_url", "Missing stream URL", null)
+                        return@setMethodCallHandler
+                    }
+                    result.success(openExternalPlayer(url, title))
                 }
                 else -> result.notImplemented()
             }
@@ -73,5 +85,22 @@ class MainActivity : FlutterActivity() {
         val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
         val current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
         return current.toDouble() / max.toDouble()
+    }
+
+    private fun openExternalPlayer(url: String, title: String): Boolean {
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse(url), "application/x-mpegURL")
+            putExtra("title", title)
+            putExtra("android.intent.extra.TITLE", title)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            startActivity(Intent.createChooser(intent, "Mở bằng trình phát ngoài"))
+            true
+        } catch (_: ActivityNotFoundException) {
+            false
+        } catch (_: Exception) {
+            false
+        }
     }
 }
