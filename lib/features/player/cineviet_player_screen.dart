@@ -98,12 +98,14 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final parsed = Uri.tryParse(raw);
     final alreadyProxy =
         parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
-    if (!Platform.isWindows || alreadyProxy) return [raw];
+    if (!(Platform.isWindows || Platform.isAndroid) || alreadyProxy) {
+      return [raw];
+    }
 
     final proxy =
         'https://cineviet.live/api/stream?url=${Uri.encodeComponent(raw)}';
-    // Windows/media_kit handles many HLS URLs directly. Try the original URL
-    // first to avoid proxy stalls, then fall back to CineViet's HLS proxy.
+    // Try the original URL first, then fall back to CineViet's HLS proxy for
+    // Windows and Android TV boxes that are picky about upstream CDN headers.
     return [raw, proxy];
   }
 
@@ -248,7 +250,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Không mở được stream: $lastError';
+        _error = _friendlyPlaybackError(lastError);
       });
       return;
     }
@@ -372,16 +374,31 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _armHideTimer();
   }
 
+  String _friendlyPlaybackError(Object? error) {
+    final text = '$error';
+    final lower = text.toLowerCase();
+    if (lower.contains('mediacodec') ||
+        lower.contains('decoder') ||
+        lower.contains('exoplaybackexception') ||
+        lower.contains('videoerror')) {
+      return 'Thiết bị không giải mã được video này. Thường do Android TV/TV box không hỗ trợ codec/profile của nguồn phim 1080p. Hãy thử tập/nguồn khác hoặc bản 720p nếu có.';
+    }
+    return 'Không mở được stream. Vui lòng thử lại hoặc chọn nguồn khác nếu có.';
+  }
+
   void _syncPlayerState() {
     final value = _controller?.value;
     if (!mounted || value == null) return;
     final buffering = value.isBuffering;
     final playbackError = value.errorDescription;
+    final friendlyError = playbackError == null
+        ? null
+        : _friendlyPlaybackError(playbackError);
     if (buffering != _buffering ||
-        playbackError != _error && playbackError != null) {
+        friendlyError != null && friendlyError != _error) {
       setState(() {
         _buffering = buffering;
-        if (playbackError != null) _error = playbackError;
+        if (friendlyError != null) _error = friendlyError;
       });
     }
   }
