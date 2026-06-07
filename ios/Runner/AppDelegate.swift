@@ -5,7 +5,7 @@ import UIKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
-  private let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
+  private lazy var volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 1, height: 1))
   private weak var volumeSlider: UISlider?
 
   override func application(
@@ -24,23 +24,6 @@ import UIKit
 
   private func setupPlayerControlChannel() {
     guard let controller = window?.rootViewController as? FlutterViewController else { return }
-
-    do {
-      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
-      try AVAudioSession.sharedInstance().setActive(true)
-    } catch {
-      // Không để audio-session lỗi làm crash lần mở app đầu tiên trên iOS.
-    }
-
-    if volumeView.superview == nil {
-      volumeView.alpha = 0.01
-      volumeView.isUserInteractionEnabled = false
-      controller.view.addSubview(volumeView)
-      volumeSlider = volumeView.subviews.compactMap { $0 as? UISlider }.first
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
-        self?.volumeSlider = self?.volumeView.subviews.compactMap { $0 as? UISlider }.first
-      }
-    }
 
     let channel = FlutterMethodChannel(
       name: "live.cineviet/brightness",
@@ -77,6 +60,7 @@ import UIKit
   }
 
   private func setSystemVolume(_ value: Double) {
+    ensureVolumeControlReady()
     let clamped = Float(min(max(value, 0.0), 1.0))
     if volumeSlider == nil {
       volumeSlider = volumeView.subviews.compactMap { $0 as? UISlider }.first
@@ -87,5 +71,26 @@ import UIKit
     }
     volumeSlider?.value = clamped
     volumeSlider?.sendActions(for: .valueChanged)
+  }
+
+  private func ensureVolumeControlReady() {
+    guard let controller = window?.rootViewController as? FlutterViewController else { return }
+
+    do {
+      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback, options: [])
+      try AVAudioSession.sharedInstance().setActive(true)
+    } catch {
+      // Không để audio-session lỗi làm crash app.
+    }
+
+    if volumeView.superview == nil {
+      volumeView.alpha = 0.01
+      volumeView.isUserInteractionEnabled = false
+      controller.view.addSubview(volumeView)
+      volumeSlider = volumeView.subviews.compactMap { $0 as? UISlider }.first
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+        self?.volumeSlider = self?.volumeView.subviews.compactMap { $0 as? UISlider }.first
+      }
+    }
   }
 }
