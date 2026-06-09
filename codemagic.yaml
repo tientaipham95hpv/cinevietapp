@@ -11,14 +11,14 @@ workflows:
           flutter clean
           flutter pub get
       - name: Build mobile/tablet APK
-        script: flutter build apk --release --flavor mobile --build-name=1.0.2 --build-number=7055
+        script: flutter build apk --release --flavor mobile --build-name=1.0.3 --build-number=7056
       - name: Build Android TV/TV box APK
-        script: flutter build apk --release --flavor tv --build-name=1.0.2 --build-number=7055
+        script: flutter build apk --release --flavor tv --build-name=1.0.3 --build-number=7056
       - name: Collect APK artifacts
         script: |
           mkdir -p build/app/outputs/cineviet-release
-          cp build/app/outputs/flutter-apk/app-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-1.0.2+7055.apk
-          cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-1.0.2+7055.apk
+          cp build/app/outputs/flutter-apk/app-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-1.0.3+7056.apk
+          cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-1.0.3+7056.apk
     artifacts:
       - build/app/outputs/cineviet-release/*.apk
       - build/app/outputs/flutter-apk/*.apk
@@ -83,7 +83,7 @@ workflows:
           flutter clean
           flutter pub get
       - name: Build Windows release
-        script: flutter build windows --release --build-name=1.0.2 --build-number=7055
+        script: flutter build windows --release --build-name=1.0.3 --build-number=7056
       - name: Package Windows portable zip
         script: |
           powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item scripts\register_windows_protocol.ps1 build\windows\x64\runner\Release\Register-CineViet-Google-Login.ps1 -Force; New-Item -ItemType Directory -Force build\windows\package | Out-Null; Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath build\windows\package\$env:WINDOWS_ZIP_NAME -Force"
