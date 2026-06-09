@@ -12,17 +12,15 @@ workflows:
           flutter pub get
       - name: Build mobile/tablet APKs by ABI
         script: flutter build apk --release --flavor mobile --split-per-abi --build-name=1.0.3 --build-number=7056
-      - name: Build Android TV/TV box APKs by ABI
-        script: flutter build apk --release --flavor tv --split-per-abi --build-name=1.0.3 --build-number=7056
+      - name: Build Android TV/TV box universal APK
+        script: flutter build apk --release --flavor tv --build-name=1.0.3 --build-number=7056
       - name: Collect APK artifacts
         script: |
           mkdir -p build/app/outputs/cineviet-release
           cp build/app/outputs/flutter-apk/app-arm64-v8a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-arm64-v8a-1.0.3+7056.apk
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-armeabi-v7a-1.0.3+7056.apk
           cp build/app/outputs/flutter-apk/app-x86_64-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-x86_64-1.0.3+7056.apk
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-arm64-v8a-1.0.3+7056.apk
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-armeabi-v7a-1.0.3+7056.apk
-          cp build/app/outputs/flutter-apk/app-x86_64-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-x86_64-1.0.3+7056.apk
+          cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-universal-1.0.3+7056.apk
     artifacts:
       - build/app/outputs/cineviet-release/*.apk
       - build/app/outputs/flutter-apk/*-release.apk
@@ -78,7 +76,7 @@ workflows:
     environment:
       flutter: stable
       vars:
-        WINDOWS_ZIP_NAME: "CineViet-Windows-1.0.2.zip"
+        WINDOWS_ZIP_NAME: "CineViet-Windows-1.0.3.zip"
     scripts:
       - name: Enable Windows desktop
         script: flutter config --enable-windows-desktop
@@ -92,5 +90,5 @@ workflows:
         script: |
           powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item scripts\register_windows_protocol.ps1 build\windows\x64\runner\Release\Register-CineViet-Google-Login.ps1 -Force; New-Item -ItemType Directory -Force build\windows\package | Out-Null; Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath build\windows\package\$env:WINDOWS_ZIP_NAME -Force"
     artifacts:
-      - build/windows/package/CineViet-Windows-1.0.2.zip
+      - build/windows/package/CineViet-Windows-1.0.3.zip
       - build/windows/x64/runner/Release/**
