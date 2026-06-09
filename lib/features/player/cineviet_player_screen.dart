@@ -77,6 +77,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   List<_SubtitleCue> _subtitleCues = const [];
   bool _subtitleLoading = false;
   String? _subtitleError;
+  double _playbackSpeed = 1.0;
   List<String> _activeCandidateUrls = const [];
   int _activeCandidateIndex = 0;
   double? _scrubProgress;
@@ -122,14 +123,16 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     return 3;
   }
 
-  List<MapEntry<EpisodeServer, EpisodeItem>> get _candidateEpisodesForAndroidTv {
+  List<MapEntry<EpisodeServer, EpisodeItem>>
+  get _candidateEpisodesForAndroidTv {
     final currentKey = _episodeKey(widget.episode);
     final out = <MapEntry<EpisodeServer, EpisodeItem>>[];
     for (final server in widget.movie.episodes) {
       for (final episode in server.items) {
         final url = _streamUrlOf(episode);
         if (url.isEmpty || !url.startsWith(RegExp(r'https?://'))) continue;
-        final sameEpisode = _episodeKey(episode) == currentKey ||
+        final sameEpisode =
+            _episodeKey(episode) == currentKey ||
             episode.displayName == widget.episode.displayName;
         if (!sameEpisode) continue;
         out.add(MapEntry(server, episode));
@@ -138,11 +141,17 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     if (out.isEmpty) return [MapEntry(widget.server, widget.episode)];
 
     out.sort((a, b) {
-      final aCurrent = identical(a.value, widget.episode) ||
-          (_streamUrlOf(a.value) == _rawStreamUrl && a.key.name == widget.server.name);
-      final bCurrent = identical(b.value, widget.episode) ||
-          (_streamUrlOf(b.value) == _rawStreamUrl && b.key.name == widget.server.name);
-      final byServer = _androidTvServerPriority(a.key).compareTo(_androidTvServerPriority(b.key));
+      final aCurrent =
+          identical(a.value, widget.episode) ||
+          (_streamUrlOf(a.value) == _rawStreamUrl &&
+              a.key.name == widget.server.name);
+      final bCurrent =
+          identical(b.value, widget.episode) ||
+          (_streamUrlOf(b.value) == _rawStreamUrl &&
+              b.key.name == widget.server.name);
+      final byServer = _androidTvServerPriority(
+        a.key,
+      ).compareTo(_androidTvServerPriority(b.key));
       if (byServer != 0) return byServer;
       if (aCurrent != bCurrent) return aCurrent ? -1 : 1;
       return a.key.name.compareTo(b.key.name);
@@ -177,7 +186,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         final sourceUrl = _streamUrlOf(entry.value);
         if (sourceUrl.isEmpty) continue;
         final parsed = Uri.tryParse(sourceUrl);
-        final alreadyProxy = parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
+        final alreadyProxy =
+            parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
 
         if (_isAndroidTvBuild && !alreadyProxy) {
           // Android TV boxes are more likely to fail on 1080p/high-profile
@@ -200,7 +210,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
           continue;
         }
 
-        final preferred = alreadyProxy ? sourceUrl : _proxiedStreamUrl(sourceUrl, androidTvSafe: true);
+        final preferred = alreadyProxy
+            ? sourceUrl
+            : _proxiedStreamUrl(sourceUrl, androidTvSafe: true);
         // Keep fallback per source: Ophim proxy -> Ophim direct -> PhimAPI proxy
         // -> PhimAPI direct -> others. If the proxy is blocked by a CDN, we do
         // not skip the preferred source entirely.
@@ -211,7 +223,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     }
 
     final parsed = Uri.tryParse(raw);
-    final alreadyProxy = parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
+    final alreadyProxy =
+        parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
     if (!Platform.isWindows || alreadyProxy) return [raw];
 
     final proxy = _proxiedStreamUrl(raw, androidTvSafe: false);
@@ -228,7 +241,12 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       final lines = block
           .split('\n')
           .map((e) => e.trim())
-          .where((e) => e.isNotEmpty && !e.startsWith('WEBVTT') && !e.startsWith('NOTE'))
+          .where(
+            (e) =>
+                e.isNotEmpty &&
+                !e.startsWith('WEBVTT') &&
+                !e.startsWith('NOTE'),
+          )
           .toList();
       if (lines.isEmpty) continue;
       final timeIndex = lines.indexWhere((l) => l.contains('-->'));
@@ -238,7 +256,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       final start = _parseSubtitleTime(parts[0]);
       final end = _parseSubtitleTime(parts[1].split(RegExp(r'\s+')).first);
       if (start == null || end == null || end <= start) continue;
-      final body = lines.skip(timeIndex + 1).join('\n').replaceAll(RegExp(r'<[^>]+>'), '').trim();
+      final body = lines
+          .skip(timeIndex + 1)
+          .join('\n')
+          .replaceAll(RegExp(r'<[^>]+>'), '')
+          .trim();
       if (body.isEmpty) continue;
       cues.add(_SubtitleCue(start: start, end: end, text: body));
     }
@@ -247,13 +269,24 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   Duration? _parseSubtitleTime(String raw) {
     final clean = raw.trim().replaceAll(',', '.');
-    final match = RegExp(r'(?:(\d+):)?(\d{2}):(\d{2})\.(\d{1,3})').firstMatch(clean);
+    final match = RegExp(
+      r'(?:(\d+):)?(\d{2}):(\d{2})\.(\d{1,3})',
+    ).firstMatch(clean);
     if (match == null) return null;
     final hours = int.tryParse(match.group(1) ?? '0') ?? 0;
     final minutes = int.tryParse(match.group(2) ?? '0') ?? 0;
     final seconds = int.tryParse(match.group(3) ?? '0') ?? 0;
-    final millis = int.tryParse((match.group(4) ?? '0').padRight(3, '0').substring(0, 3)) ?? 0;
-    return Duration(hours: hours, minutes: minutes, seconds: seconds, milliseconds: millis);
+    final millis =
+        int.tryParse(
+          (match.group(4) ?? '0').padRight(3, '0').substring(0, 3),
+        ) ??
+        0;
+    return Duration(
+      hours: hours,
+      minutes: minutes,
+      seconds: seconds,
+      milliseconds: millis,
+    );
   }
 
   Future<void> _loadSelectedSubtitle() async {
@@ -275,12 +308,20 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     }
     try {
       final uri = Uri.parse(subtitle.url);
-      final res = await HttpClient().getUrl(uri).then((req) {
-        req.headers.set(HttpHeaders.userAgentHeader, 'CineVietFlutter/1.0');
-        req.headers.set(HttpHeaders.refererHeader, 'https://cineviet.live/');
-        return req.close();
-      }).timeout(const Duration(seconds: 12));
-      if (res.statusCode < 200 || res.statusCode >= 300) throw Exception('HTTP ${res.statusCode}');
+      final res = await HttpClient()
+          .getUrl(uri)
+          .then((req) {
+            req.headers.set(HttpHeaders.userAgentHeader, 'CineVietFlutter/1.0');
+            req.headers.set(
+              HttpHeaders.refererHeader,
+              'https://cineviet.live/',
+            );
+            return req.close();
+          })
+          .timeout(const Duration(seconds: 12));
+      if (res.statusCode < 200 || res.statusCode >= 300) {
+        throw Exception('HTTP ${res.statusCode}');
+      }
       final body = await res.transform(utf8.decoder).join();
       final cues = _parseWebVtt(body);
       if (!mounted) return;
@@ -331,6 +372,74 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     );
   }
 
+  String _formatSpeed(double speed) {
+    return speed == speed.truncateToDouble()
+        ? '${speed.toStringAsFixed(0)}x'
+        : '${speed.toStringAsFixed(2).replaceFirst(RegExp(r'0$'), '')}x';
+  }
+
+  Future<void> _setPlaybackSpeed(double speed) async {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    final nextSpeed = speed.clamp(0.5, 2.0);
+    setState(() {
+      _playbackSpeed = nextSpeed;
+    });
+    try {
+      await controller.setPlaybackSpeed(nextSpeed);
+    } catch (_) {
+      // Playback speed should never block viewing.
+    }
+    _revealControls();
+  }
+
+  Future<void> _showSpeedSheet() async {
+    final speeds = <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return SafeArea(
+          child: Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: CineVietColors.card.withValues(alpha: 0.96),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: CineVietColors.borderLight),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tốc độ phát',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                for (final speed in speeds)
+                  _SubtitleTile(
+                    label: speed == 1.0
+                        ? 'Bình thường 1x'
+                        : _formatSpeed(speed),
+                    selected: _playbackSpeed == speed,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      unawaited(_setPlaybackSpeed(speed));
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -345,7 +454,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _bindWatchTogetherSocket();
     _loadScreenBrightness();
     _loadSystemVolume();
-    _selectedSubtitle = widget.episode.subtitles.isNotEmpty ? widget.episode.subtitles.first : null;
+    _selectedSubtitle = widget.episode.subtitles.isNotEmpty
+        ? widget.episode.subtitles.first
+        : null;
     unawaited(_loadSelectedSubtitle());
     _initPlayer();
   }
@@ -462,6 +573,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
               ? const Duration(seconds: 12)
               : const Duration(seconds: 30),
         );
+        try {
+          await nextController.setPlaybackSpeed(_playbackSpeed);
+        } catch (_) {}
         controller = nextController;
         _activeCandidateIndex = i;
         break;
@@ -649,7 +763,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   Future<void> _tryNextCandidateAfterPlaybackError(String playbackError) async {
-    if (_recoveringPlaybackError || !_isCodecOrStreamPlaybackError(playbackError)) return;
+    if (_recoveringPlaybackError ||
+        !_isCodecOrStreamPlaybackError(playbackError)) {
+      return;
+    }
     final nextIndex = _activeCandidateIndex + 1;
     if (nextIndex >= _activeCandidateUrls.length) return;
 
@@ -680,7 +797,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         _activeCandidateIndex = i;
         nextController.addListener(_syncPlayerState);
         await nextController.initialize().timeout(
-          Platform.isWindows ? const Duration(seconds: 12) : const Duration(seconds: 30),
+          Platform.isWindows
+              ? const Duration(seconds: 12)
+              : const Duration(seconds: 30),
         );
         await nextController.setVolume(_appVolume);
         if (mounted) {
@@ -689,7 +808,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             _error = null;
           });
         }
-        try { await nextController.play(); } catch (_) {}
+        try {
+          await nextController.play();
+        } catch (_) {}
         _recoveringPlaybackError = false;
         return;
       } catch (e) {
@@ -715,7 +836,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     if (!mounted || value == null) return;
     final buffering = value.isBuffering;
     final playbackError = value.errorDescription;
-    if (playbackError != null && _activeCandidateIndex + 1 < _activeCandidateUrls.length) {
+    if (playbackError != null &&
+        _activeCandidateIndex + 1 < _activeCandidateUrls.length) {
       unawaited(_tryNextCandidateAfterPlaybackError(playbackError));
       if (buffering != _buffering) {
         setState(() => _buffering = buffering);
@@ -1396,12 +1518,14 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       valueListenable: controller,
       builder: (context, value, child) {
         final text = _activeSubtitleText(value.position);
-        if (text.isEmpty && !_subtitleLoading && _subtitleError == null) return const SizedBox.shrink();
+        if (text.isEmpty && !_subtitleLoading && _subtitleError == null) {
+          return const SizedBox.shrink();
+        }
         final label = text.isNotEmpty
             ? text
             : _subtitleLoading
-                ? 'Đang tải phụ đề...'
-                : (_subtitleError ?? '');
+            ? 'Đang tải phụ đề...'
+            : (_subtitleError ?? '');
         if (label.isEmpty) return const SizedBox.shrink();
         return IgnorePointer(
           child: Align(
@@ -1414,7 +1538,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   child: Text(
                     label,
                     textAlign: TextAlign.center,
@@ -1802,9 +1929,18 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                         ),
                       if (widget.episode.subtitles.isNotEmpty)
                         const SizedBox(width: CineVietSpacing.sm),
+                      FocusTraversalOrder(
+                        order: const NumericFocusOrder(8),
+                        child: _PlayerRoundButton(
+                          icon: Icons.speed_rounded,
+                          label: _formatSpeed(_playbackSpeed),
+                          onTap: _showSpeedSheet,
+                        ),
+                      ),
+                      const SizedBox(width: CineVietSpacing.sm),
                       if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
                         FocusTraversalOrder(
-                          order: const NumericFocusOrder(8),
+                          order: const NumericFocusOrder(9),
                           child: _PlayerRoundButton(
                             icon: Icons.open_in_new_rounded,
                             label: 'VLC/MX',
@@ -1814,7 +1950,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                       if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
                         const SizedBox(width: CineVietSpacing.sm),
                       FocusTraversalOrder(
-                        order: const NumericFocusOrder(9),
+                        order: const NumericFocusOrder(10),
                         child: _PlayerRoundButton(
                           icon: _fitIcon,
                           label: _fitLabel,
@@ -1834,7 +1970,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 }
 
 class _SubtitleCue {
-  const _SubtitleCue({required this.start, required this.end, required this.text});
+  const _SubtitleCue({
+    required this.start,
+    required this.end,
+    required this.text,
+  });
   final Duration start;
   final Duration end;
   final String text;
@@ -1868,7 +2008,11 @@ class _SubtitleSheet extends StatelessWidget {
           children: [
             const Text(
               'Chọn phụ đề',
-              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
             ),
             const SizedBox(height: 12),
             _SubtitleTile(
@@ -1890,7 +2034,11 @@ class _SubtitleSheet extends StatelessWidget {
 }
 
 class _SubtitleTile extends StatelessWidget {
-  const _SubtitleTile({required this.label, required this.selected, required this.onTap});
+  const _SubtitleTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
   final String label;
   final bool selected;
   final VoidCallback onTap;
@@ -1903,10 +2051,18 @@ class _SubtitleTile extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: Icon(
-          selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+          selected
+              ? Icons.radio_button_checked_rounded
+              : Icons.radio_button_off_rounded,
           color: selected ? CineVietColors.accent : Colors.white70,
         ),
-        title: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+        title: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
       ),
     );
   }
