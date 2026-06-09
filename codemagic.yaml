@@ -13,7 +13,7 @@ workflows:
       - name: Build mobile/tablet APKs by ABI
         script: flutter build apk --release --flavor mobile --split-per-abi --dart-define=APP_VARIANT=mobile --build-name=1.0.3 --build-number=7056
       - name: Build Android TV/TV box universal APK
-        script: flutter build apk --release --flavor tv --dart-define=APP_VARIANT=tv --build-name=1.0.3 --build-number=7056
+        script: flutter build apk --release --flavor tv --dart-define=APP_VARIANT=tv --dart-define=APP_IS_TV=true --build-name=1.0.3 --build-number=7056
       - name: Collect APK artifacts
         script: |
           mkdir -p build/app/outputs/cineviet-release

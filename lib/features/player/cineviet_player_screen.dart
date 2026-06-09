@@ -71,6 +71,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   int _lastWatchSyncSentAt = 0;
   bool _applyingWatchSync = false;
   bool _recoveringPlaybackError = false;
+  static const bool _isAndroidTvBuild = bool.fromEnvironment('APP_IS_TV');
   List<String> _activeCandidateUrls = const [];
   int _activeCandidateIndex = 0;
   double? _scrubProgress;
@@ -144,10 +145,17 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     return out;
   }
 
-  String _proxiedStreamUrl(String raw, {required bool androidTvSafe}) {
+  String _proxiedStreamUrl(
+    String raw, {
+    required bool androidTvSafe,
+    int? maxHeight,
+    int? maxBandwidth,
+  }) {
     final encoded = Uri.encodeComponent(raw);
     if (androidTvSafe) {
-      return 'https://cineviet.live/api/stream?maxHeight=720&maxBandwidth=8000000&url=$encoded';
+      final height = maxHeight ?? 720;
+      final bandwidth = maxBandwidth ?? (height <= 480 ? 4000000 : 8000000);
+      return 'https://cineviet.live/api/stream?maxHeight=$height&maxBandwidth=$bandwidth&url=$encoded';
     }
     return 'https://cineviet.live/api/stream?url=$encoded';
   }
@@ -165,6 +173,28 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         if (sourceUrl.isEmpty) continue;
         final parsed = Uri.tryParse(sourceUrl);
         final alreadyProxy = parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
+
+        if (_isAndroidTvBuild && !alreadyProxy) {
+          // Android TV boxes are more likely to fail on 1080p/high-profile
+          // encodes. Try safer renditions first, then original as last resort.
+          final safe480 = _proxiedStreamUrl(
+            sourceUrl,
+            androidTvSafe: true,
+            maxHeight: 480,
+            maxBandwidth: 4000000,
+          );
+          final safe720 = _proxiedStreamUrl(
+            sourceUrl,
+            androidTvSafe: true,
+            maxHeight: 720,
+            maxBandwidth: 8000000,
+          );
+          if (seen.add(safe480)) urls.add(safe480);
+          if (seen.add(safe720)) urls.add(safe720);
+          if (seen.add(sourceUrl)) urls.add(sourceUrl);
+          continue;
+        }
+
         final preferred = alreadyProxy ? sourceUrl : _proxiedStreamUrl(sourceUrl, androidTvSafe: true);
         // Keep fallback per source: Ophim proxy -> Ophim direct -> PhimAPI proxy
         // -> PhimAPI direct -> others. If the proxy is blocked by a CDN, we do
@@ -483,7 +513,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         lower.contains('decoder') ||
         lower.contains('exoplaybackexception') ||
         lower.contains('videoerror')) {
-      return 'Thiết bị không giải mã được video này. Thường do Android TV/TV box không hỗ trợ codec/profile của nguồn phim 1080p. Hãy thử tập/nguồn khác hoặc bản 720p nếu có.';
+      return _isAndroidTvBuild
+          ? 'Thiết bị đã thử các nguồn an toàn 480p/720p nhưng vẫn không giải mã được video này. Có thể nguồn phim dùng codec/profile không tương thích TV box.'
+          : 'Thiết bị không giải mã được video này. Thường do Android TV/TV box không hỗ trợ codec/profile của nguồn phim 1080p. Hãy thử tập/nguồn khác hoặc bản 720p nếu có.';
     }
     return 'Không mở được stream. Vui lòng thử lại hoặc chọn nguồn khác nếu có.';
   }
