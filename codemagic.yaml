@@ -1,4 +1,28 @@
 workflows:
+  android-release:
+    name: CineViet Android APK Release
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+    scripts:
+      - name: Flutter clean/get
+        script: |
+          flutter clean
+          flutter pub get
+      - name: Build mobile/tablet APK
+        script: flutter build apk --release --flavor mobile --build-name=1.0.2 --build-number=7055
+      - name: Build Android TV/TV box APK
+        script: flutter build apk --release --flavor tv --build-name=1.0.2 --build-number=7055
+      - name: Collect APK artifacts
+        script: |
+          mkdir -p build/app/outputs/cineviet-release
+          cp build/app/outputs/flutter-apk/app-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-1.0.2+7055.apk
+          cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-1.0.2+7055.apk
+    artifacts:
+      - build/app/outputs/cineviet-release/*.apk
+      - build/app/outputs/flutter-apk/*.apk
+
   ios-release:
     name: CineViet iOS Release
     max_build_duration: 60

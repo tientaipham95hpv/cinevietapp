@@ -70,6 +70,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   String? _lastWatchRoomFrom;
   int _lastWatchSyncSentAt = 0;
   bool _applyingWatchSync = false;
+  bool _recoveringPlaybackError = false;
+  List<String> _activeCandidateUrls = const [];
+  int _activeCandidateIndex = 0;
   double? _scrubProgress;
 
   bool get _isWatchTogether => _watchRoomCode != null;
@@ -90,22 +93,95 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       ? widget.episode.linkEmbed!
       : '';
 
+  String _streamUrlOf(EpisodeItem episode) {
+    final m3u8 = episode.linkM3u8?.trim() ?? '';
+    if (m3u8.isNotEmpty) return m3u8;
+    return episode.linkEmbed?.trim() ?? '';
+  }
+
+  String _episodeKey(EpisodeItem episode) {
+    final text = episode.name.trim().toLowerCase();
+    final numeric = RegExp(r'\d+').firstMatch(text)?.group(0);
+    return numeric ?? text.replaceAll(RegExp(r'\s+'), ' ');
+  }
+
+  int _androidTvServerPriority(EpisodeServer server) {
+    final name = server.name.toLowerCase();
+    // Prefer sources that commonly expose HLS variants/CDNs suitable for proxy
+    // filtering. Current server gets a small boost separately so user choice is
+    // respected unless another source is clearly safer.
+    if (name.contains('ophim')) return 0;
+    if (name.contains('phimapi') || name.contains('kkphim')) return 1;
+    if (name.contains('vietsub')) return 2;
+    return 3;
+  }
+
+  List<MapEntry<EpisodeServer, EpisodeItem>> get _candidateEpisodesForAndroidTv {
+    final currentKey = _episodeKey(widget.episode);
+    final out = <MapEntry<EpisodeServer, EpisodeItem>>[];
+    for (final server in widget.movie.episodes) {
+      for (final episode in server.items) {
+        final url = _streamUrlOf(episode);
+        if (url.isEmpty || !url.startsWith(RegExp(r'https?://'))) continue;
+        final sameEpisode = _episodeKey(episode) == currentKey ||
+            episode.displayName == widget.episode.displayName;
+        if (!sameEpisode) continue;
+        out.add(MapEntry(server, episode));
+      }
+    }
+    if (out.isEmpty) return [MapEntry(widget.server, widget.episode)];
+
+    out.sort((a, b) {
+      final aCurrent = identical(a.value, widget.episode) ||
+          (_streamUrlOf(a.value) == _rawStreamUrl && a.key.name == widget.server.name);
+      final bCurrent = identical(b.value, widget.episode) ||
+          (_streamUrlOf(b.value) == _rawStreamUrl && b.key.name == widget.server.name);
+      final byServer = _androidTvServerPriority(a.key).compareTo(_androidTvServerPriority(b.key));
+      if (byServer != 0) return byServer;
+      if (aCurrent != bCurrent) return aCurrent ? -1 : 1;
+      return a.key.name.compareTo(b.key.name);
+    });
+    return out;
+  }
+
+  String _proxiedStreamUrl(String raw, {required bool androidTvSafe}) {
+    final encoded = Uri.encodeComponent(raw);
+    if (androidTvSafe) {
+      return 'https://cineviet.live/api/stream?maxHeight=720&maxBandwidth=8000000&url=$encoded';
+    }
+    return 'https://cineviet.live/api/stream?url=$encoded';
+  }
+
   List<String> get _candidateStreamUrls {
     final raw = _rawStreamUrl.trim();
     if (raw.isEmpty) return const [];
     if (!raw.startsWith(RegExp(r'https?://'))) return [raw];
 
-    final parsed = Uri.tryParse(raw);
-    final alreadyProxy =
-        parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
-    if (!(Platform.isWindows || Platform.isAndroid) || alreadyProxy) {
-      return [raw];
+    if (Platform.isAndroid) {
+      final urls = <String>[];
+      final seen = <String>{};
+      for (final entry in _candidateEpisodesForAndroidTv) {
+        final sourceUrl = _streamUrlOf(entry.value);
+        if (sourceUrl.isEmpty) continue;
+        final parsed = Uri.tryParse(sourceUrl);
+        final alreadyProxy = parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
+        final preferred = alreadyProxy ? sourceUrl : _proxiedStreamUrl(sourceUrl, androidTvSafe: true);
+        // Keep fallback per source: Ophim proxy -> Ophim direct -> PhimAPI proxy
+        // -> PhimAPI direct -> others. If the proxy is blocked by a CDN, we do
+        // not skip the preferred source entirely.
+        if (seen.add(preferred)) urls.add(preferred);
+        if (!alreadyProxy && seen.add(sourceUrl)) urls.add(sourceUrl);
+      }
+      return urls;
     }
 
-    final proxy =
-        'https://cineviet.live/api/stream?url=${Uri.encodeComponent(raw)}';
-    // Try the original URL first, then fall back to CineViet's HLS proxy for
-    // Windows and Android TV boxes that are picky about upstream CDN headers.
+    final parsed = Uri.tryParse(raw);
+    final alreadyProxy = parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
+    if (!Platform.isWindows || alreadyProxy) return [raw];
+
+    final proxy = _proxiedStreamUrl(raw, androidTvSafe: false);
+    // Windows keeps original-first behavior; Android TV uses safer proxy-first
+    // multi-source logic above.
     return [raw, proxy];
   }
 
@@ -208,6 +284,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   Future<void> _initPlayer() async {
     final candidateUrls = _candidateStreamUrls;
+    _activeCandidateUrls = candidateUrls;
+    _activeCandidateIndex = 0;
     if (candidateUrls.isEmpty ||
         !candidateUrls.first.startsWith(RegExp(r'https?://'))) {
       setState(() {
@@ -219,7 +297,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
     VideoPlayerController? controller;
     Object? lastError;
-    for (final streamUrl in candidateUrls) {
+    for (var i = 0; i < candidateUrls.length; i++) {
+      final streamUrl = candidateUrls[i];
+      _activeCandidateIndex = i;
       try {
         // ignore: deprecated_member_use
         final nextController = VideoPlayerController.network(
@@ -235,6 +315,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
               : const Duration(seconds: 30),
         );
         controller = nextController;
+        _activeCandidateIndex = i;
         break;
       } catch (e) {
         lastError = e;
@@ -407,11 +488,90 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     return 'Không mở được stream. Vui lòng thử lại hoặc chọn nguồn khác nếu có.';
   }
 
+  bool _isCodecOrStreamPlaybackError(String text) {
+    final lower = text.toLowerCase();
+    return lower.contains('mediacodec') ||
+        lower.contains('decoder') ||
+        lower.contains('exoplaybackexception') ||
+        lower.contains('videoerror') ||
+        lower.contains('source error') ||
+        lower.contains('behindlivewindow');
+  }
+
+  Future<void> _tryNextCandidateAfterPlaybackError(String playbackError) async {
+    if (_recoveringPlaybackError || !_isCodecOrStreamPlaybackError(playbackError)) return;
+    final nextIndex = _activeCandidateIndex + 1;
+    if (nextIndex >= _activeCandidateUrls.length) return;
+
+    _recoveringPlaybackError = true;
+    setState(() {
+      _loading = true;
+      _buffering = false;
+      _error = null;
+    });
+
+    try {
+      _controller?.removeListener(_syncPlayerState);
+      await _controller?.dispose();
+    } catch (_) {}
+    _controller = null;
+
+    Object? lastError;
+    for (var i = nextIndex; i < _activeCandidateUrls.length; i++) {
+      final streamUrl = _activeCandidateUrls[i];
+      try {
+        // ignore: deprecated_member_use
+        final nextController = VideoPlayerController.network(
+          streamUrl,
+          formatHint: VideoFormat.hls,
+          httpHeaders: const <String, String>{},
+        );
+        _controller = nextController;
+        _activeCandidateIndex = i;
+        nextController.addListener(_syncPlayerState);
+        await nextController.initialize().timeout(
+          Platform.isWindows ? const Duration(seconds: 12) : const Duration(seconds: 30),
+        );
+        await nextController.setVolume(_appVolume);
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _error = null;
+          });
+        }
+        try { await nextController.play(); } catch (_) {}
+        _recoveringPlaybackError = false;
+        return;
+      } catch (e) {
+        lastError = e;
+        try {
+          _controller?.removeListener(_syncPlayerState);
+          await _controller?.dispose();
+        } catch (_) {}
+        _controller = null;
+      }
+    }
+
+    _recoveringPlaybackError = false;
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      _error = _friendlyPlaybackError(lastError ?? playbackError);
+    });
+  }
+
   void _syncPlayerState() {
     final value = _controller?.value;
     if (!mounted || value == null) return;
     final buffering = value.isBuffering;
     final playbackError = value.errorDescription;
+    if (playbackError != null && _activeCandidateIndex + 1 < _activeCandidateUrls.length) {
+      unawaited(_tryNextCandidateAfterPlaybackError(playbackError));
+      if (buffering != _buffering) {
+        setState(() => _buffering = buffering);
+      }
+      return;
+    }
     final friendlyError = playbackError == null
         ? null
         : _friendlyPlaybackError(playbackError);
