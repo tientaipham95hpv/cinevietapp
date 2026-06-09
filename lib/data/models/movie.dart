@@ -29,17 +29,30 @@ class MoviePerson {
   }
 }
 
+class EpisodeSubtitle {
+  const EpisodeSubtitle({required this.label, required this.url});
+  final String label;
+  final String url;
+
+  factory EpisodeSubtitle.fromJson(Map<String, dynamic> json) => EpisodeSubtitle(
+    label: '${json['label'] ?? json['lang'] ?? json['name'] ?? 'Phụ đề'}'.trim(),
+    url: '${json['url'] ?? json['subtitle_url'] ?? json['src'] ?? ''}'.trim(),
+  );
+}
+
 class EpisodeItem {
   const EpisodeItem({
     required this.name,
     this.filename,
     this.linkM3u8,
     this.linkEmbed,
+    this.subtitles = const [],
   });
   final String name;
   final String? filename;
   final String? linkM3u8;
   final String? linkEmbed;
+  final List<EpisodeSubtitle> subtitles;
 
   String get displayName => _normalizeEpisodeName(name);
 
@@ -48,6 +61,11 @@ class EpisodeItem {
     filename: json['filename']?.toString(),
     linkM3u8: json['link_m3u8']?.toString(),
     linkEmbed: json['link_embed']?.toString(),
+    subtitles: ((json['subtitles'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => EpisodeSubtitle.fromJson(Map<String, dynamic>.from(e)))
+        .where((s) => s.url.isNotEmpty)
+        .toList(),
   );
 }
 

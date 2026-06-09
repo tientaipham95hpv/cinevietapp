@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:convert';
+import 'dart:io' show HttpClient, HttpHeaders, Platform;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,6 +73,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   bool _applyingWatchSync = false;
   bool _recoveringPlaybackError = false;
   static const bool _isAndroidTvBuild = bool.fromEnvironment('APP_IS_TV');
+  EpisodeSubtitle? _selectedSubtitle;
+  List<_SubtitleCue> _subtitleCues = const [];
+  bool _subtitleLoading = false;
+  String? _subtitleError;
   List<String> _activeCandidateUrls = const [];
   int _activeCandidateIndex = 0;
   double? _scrubProgress;
@@ -215,6 +220,117 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     return [raw, proxy];
   }
 
+  List<_SubtitleCue> _parseWebVtt(String text) {
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final blocks = normalized.split(RegExp(r'\n\s*\n'));
+    final cues = <_SubtitleCue>[];
+    for (final block in blocks) {
+      final lines = block
+          .split('\n')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty && !e.startsWith('WEBVTT') && !e.startsWith('NOTE'))
+          .toList();
+      if (lines.isEmpty) continue;
+      final timeIndex = lines.indexWhere((l) => l.contains('-->'));
+      if (timeIndex < 0) continue;
+      final parts = lines[timeIndex].split('-->');
+      if (parts.length < 2) continue;
+      final start = _parseSubtitleTime(parts[0]);
+      final end = _parseSubtitleTime(parts[1].split(RegExp(r'\s+')).first);
+      if (start == null || end == null || end <= start) continue;
+      final body = lines.skip(timeIndex + 1).join('\n').replaceAll(RegExp(r'<[^>]+>'), '').trim();
+      if (body.isEmpty) continue;
+      cues.add(_SubtitleCue(start: start, end: end, text: body));
+    }
+    return cues;
+  }
+
+  Duration? _parseSubtitleTime(String raw) {
+    final clean = raw.trim().replaceAll(',', '.');
+    final match = RegExp(r'(?:(\d+):)?(\d{2}):(\d{2})\.(\d{1,3})').firstMatch(clean);
+    if (match == null) return null;
+    final hours = int.tryParse(match.group(1) ?? '0') ?? 0;
+    final minutes = int.tryParse(match.group(2) ?? '0') ?? 0;
+    final seconds = int.tryParse(match.group(3) ?? '0') ?? 0;
+    final millis = int.tryParse((match.group(4) ?? '0').padRight(3, '0').substring(0, 3)) ?? 0;
+    return Duration(hours: hours, minutes: minutes, seconds: seconds, milliseconds: millis);
+  }
+
+  Future<void> _loadSelectedSubtitle() async {
+    final subtitle = _selectedSubtitle;
+    if (subtitle == null) {
+      if (!mounted) return;
+      setState(() {
+        _subtitleCues = const [];
+        _subtitleError = null;
+        _subtitleLoading = false;
+      });
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _subtitleLoading = true;
+        _subtitleError = null;
+      });
+    }
+    try {
+      final uri = Uri.parse(subtitle.url);
+      final res = await HttpClient().getUrl(uri).then((req) {
+        req.headers.set(HttpHeaders.userAgentHeader, 'CineVietFlutter/1.0');
+        req.headers.set(HttpHeaders.refererHeader, 'https://cineviet.live/');
+        return req.close();
+      }).timeout(const Duration(seconds: 12));
+      if (res.statusCode < 200 || res.statusCode >= 300) throw Exception('HTTP ${res.statusCode}');
+      final body = await res.transform(utf8.decoder).join();
+      final cues = _parseWebVtt(body);
+      if (!mounted) return;
+      setState(() {
+        _subtitleCues = cues;
+        _subtitleLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _subtitleCues = const [];
+        _subtitleLoading = false;
+        _subtitleError = 'Không tải được phụ đề';
+      });
+    }
+  }
+
+  Future<void> _selectSubtitle(EpisodeSubtitle? subtitle) async {
+    setState(() {
+      _selectedSubtitle = subtitle;
+      _subtitleCues = const [];
+      _subtitleError = null;
+    });
+    await _loadSelectedSubtitle();
+  }
+
+  String _activeSubtitleText(Duration position) {
+    for (final cue in _subtitleCues) {
+      if (position >= cue.start && position <= cue.end) return cue.text;
+    }
+    return '';
+  }
+
+  Future<void> _showSubtitleSheet() async {
+    final subtitles = widget.episode.subtitles;
+    if (subtitles.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _SubtitleSheet(
+        subtitles: subtitles,
+        selected: _selectedSubtitle,
+        onSelect: (subtitle) {
+          Navigator.of(context).pop();
+          unawaited(_selectSubtitle(subtitle));
+        },
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -229,6 +345,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _bindWatchTogetherSocket();
     _loadScreenBrightness();
     _loadSystemVolume();
+    _selectedSubtitle = widget.episode.subtitles.isNotEmpty ? widget.episode.subtitles.first : null;
+    unawaited(_loadSelectedSubtitle());
     _initPlayer();
   }
 
@@ -1254,15 +1372,66 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       _PlayerFitMode.stretch => BoxFit.fill,
     };
     return SizedBox.expand(
-      child: FittedBox(
-        fit: fit,
-        alignment: Alignment.center,
-        child: SizedBox(
-          width: aspectRatio * 1000,
-          height: 1000,
-          child: VideoPlayer(controller),
-        ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          FittedBox(
+            fit: fit,
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: aspectRatio * 1000,
+              height: 1000,
+              child: VideoPlayer(controller),
+            ),
+          ),
+          _buildSubtitleOverlay(controller),
+        ],
       ),
+    );
+  }
+
+  Widget _buildSubtitleOverlay(VideoPlayerController controller) {
+    if (_selectedSubtitle == null) return const SizedBox.shrink();
+    return ValueListenableBuilder<VideoPlayerValue>(
+      valueListenable: controller,
+      builder: (context, value, child) {
+        final text = _activeSubtitleText(value.position);
+        if (text.isEmpty && !_subtitleLoading && _subtitleError == null) return const SizedBox.shrink();
+        final label = text.isNotEmpty
+            ? text
+            : _subtitleLoading
+                ? 'Đang tải phụ đề...'
+                : (_subtitleError ?? '');
+        if (label.isEmpty) return const SizedBox.shrink();
+        return IgnorePointer(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 96),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.62),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      height: 1.25,
+                      fontWeight: FontWeight.w800,
+                      shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1622,9 +1791,20 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                         ),
                       ),
                       const Spacer(),
-                      if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
+                      if (widget.episode.subtitles.isNotEmpty)
                         FocusTraversalOrder(
                           order: const NumericFocusOrder(7),
+                          child: _PlayerRoundButton(
+                            icon: Icons.subtitles_rounded,
+                            label: _selectedSubtitle?.label ?? 'Phụ đề',
+                            onTap: _showSubtitleSheet,
+                          ),
+                        ),
+                      if (widget.episode.subtitles.isNotEmpty)
+                        const SizedBox(width: CineVietSpacing.sm),
+                      if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
+                        FocusTraversalOrder(
+                          order: const NumericFocusOrder(8),
                           child: _PlayerRoundButton(
                             icon: Icons.open_in_new_rounded,
                             label: 'VLC/MX',
@@ -1634,7 +1814,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                       if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
                         const SizedBox(width: CineVietSpacing.sm),
                       FocusTraversalOrder(
-                        order: const NumericFocusOrder(8),
+                        order: const NumericFocusOrder(9),
                         child: _PlayerRoundButton(
                           icon: _fitIcon,
                           label: _fitLabel,
@@ -1649,6 +1829,85 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+class _SubtitleCue {
+  const _SubtitleCue({required this.start, required this.end, required this.text});
+  final Duration start;
+  final Duration end;
+  final String text;
+}
+
+class _SubtitleSheet extends StatelessWidget {
+  const _SubtitleSheet({
+    required this.subtitles,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final List<EpisodeSubtitle> subtitles;
+  final EpisodeSubtitle? selected;
+  final ValueChanged<EpisodeSubtitle?> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: CineVietColors.card.withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: CineVietColors.borderLight),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Chọn phụ đề',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 12),
+            _SubtitleTile(
+              label: 'Tắt phụ đề',
+              selected: selected == null,
+              onTap: () => onSelect(null),
+            ),
+            for (final subtitle in subtitles)
+              _SubtitleTile(
+                label: subtitle.label,
+                selected: selected?.url == subtitle.url,
+                onTap: () => onSelect(subtitle),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SubtitleTile extends StatelessWidget {
+  const _SubtitleTile({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocus(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(
+          selected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+          color: selected ? CineVietColors.accent : Colors.white70,
+        ),
+        title: Text(label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800)),
+      ),
     );
   }
 }
