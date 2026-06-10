@@ -13,7 +13,9 @@ import '../repositories/movie_repository.dart';
 
 const _mobileKey = 'cineviet-mobile-app-v1';
 const _googleServerClientId =
-    '186784861581-5l7skrrke87pmf669l6ach0brbra4v76.apps.googleusercontent.com';
+    // Web client ID used by GoogleSignIn to mint an ID token for backend exchange.
+    // Keep this aligned with android/app/google-services.json and backend allowed audiences.
+    '186784861581-mc6buqlfpbrprko3iqfp6fi0biqc3o3s.apps.googleusercontent.com';
 const _tokenKey = 'cineviet_access_token';
 const _refreshKey = 'cineviet_refresh_token';
 const _rememberLoginKey = 'cineviet_remember_login';
