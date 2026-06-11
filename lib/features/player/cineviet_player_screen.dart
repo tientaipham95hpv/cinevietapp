@@ -55,7 +55,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   bool _controlsLocked = false;
   _PlayerFitMode _fitMode = _PlayerFitMode.cover;
   double _appVolume = 1.0;
-  double _screenBrightness = 1.0;
+  double _screenBrightness = 1.0; // UI indicator only; actual brightness follows device.
   Timer? _gestureHintTimer;
   Timer? _hideTimer;
   Timer? _progressTimer;
@@ -452,7 +452,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _watchRoomState = widget.watchTogetherState;
     _watchMessages.addAll(widget.watchTogetherState?.messages ?? const []);
     _bindWatchTogetherSocket();
-    _loadScreenBrightness();
+    _syncBrightnessWithDevice();
     _loadSystemVolume();
     _selectedSubtitle = widget.episode.subtitles.isNotEmpty
         ? widget.episode.subtitles.first
@@ -858,13 +858,16 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   static const _brightnessChannel = MethodChannel('live.cineviet/brightness');
 
-  Future<void> _loadScreenBrightness() async {
+  Future<void> _syncBrightnessWithDevice() async {
     try {
       final brightness = await _brightnessChannel.invokeMethod<double>('get');
       if (mounted && brightness != null) {
-        setState(() => _screenBrightness = brightness.clamp(0.05, 1.0));
+        setState(() => _screenBrightness = brightness.clamp(0.0, 1.0));
       }
-    } catch (_) {}
+      await _brightnessChannel.invokeMethod<double>('set', {'value': brightness ?? 1.0});
+    } catch (_) {
+      if (mounted) setState(() => _screenBrightness = 1.0);
+    }
   }
 
   Future<double?> _setScreenBrightness(double value) async {
@@ -872,7 +875,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       final actual = await _brightnessChannel.invokeMethod<double>('set', {
         'value': value,
       });
-      return actual?.clamp(0.05, 1.0);
+      return actual?.clamp(0.0, 1.0);
     } catch (_) {
       return null;
     }
@@ -1010,14 +1013,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final change = -dy / size.height * 1.35;
     final isLeft = start.dx < size.width / 2;
     if (isLeft) {
-      final next = (_screenBrightness + change).clamp(0.05, 1.0);
       setState(() {
-        _screenBrightness = next;
         _gestureMode = 'brightness';
-        _gestureValue = next;
+        _gestureValue = _screenBrightness.clamp(0.0, 1.0);
       });
-      _pendingBrightness = next;
-      _scheduleLevelApply();
       _armGestureHideTimer();
     } else {
       final next = (_appVolume + change).clamp(0.0, 1.0);
@@ -1338,14 +1337,6 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             fit: StackFit.expand,
             children: [
               _buildVideo(),
-              if (_screenBrightness < 0.99)
-                IgnorePointer(
-                  child: ColoredBox(
-                    color: Colors.black.withValues(
-                      alpha: (1 - _screenBrightness).clamp(0.0, 0.72),
-                    ),
-                  ),
-                ),
               if (_controlsLocked) _buildLockedButton(),
               _buildGestureHint(),
               if (_buffering && !_loading) _buildBufferingBadge(),

@@ -144,25 +144,13 @@ class AboutScreen extends ConsumerWidget {
                                           mode: LaunchMode.externalApplication,
                                         ),
                                   icon: const Icon(Icons.download_rounded),
-                                  label: Text(
-                                    data.updateAvailable || data.forceUpdate
-                                        ? 'Tải bản cập nhật'
-                                        : 'Tải APK hiện tại',
-                                  ),
+                                  label: const Text('Tải cập nhật'),
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: CineVietSpacing.lg),
-                  const Text(
-                    'Ghi chú: Android không cho app tự cài APK im lặng. Nút tải sẽ mở link tải APK chính thức, sau đó user xác nhận cài đặt theo hệ thống.',
-                    style: TextStyle(
-                      color: CineVietColors.textSoft,
-                      height: 1.5,
                     ),
                   ),
                 ],

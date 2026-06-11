@@ -36,8 +36,8 @@ import UIKit
         case "get":
           result(Double(UIScreen.main.brightness))
         case "set":
-          let value = self?.doubleArg(call.arguments, key: "value", fallback: 0.5) ?? 0.5
-          UIScreen.main.brightness = CGFloat(min(max(value, 0.0), 1.0))
+          // Keep app brightness synced with the device setting. Do not override
+          // UIScreen.main.brightness from the player gesture.
           result(Double(UIScreen.main.brightness))
         case "getVolume":
           result(Double(AVAudioSession.sharedInstance().outputVolume))

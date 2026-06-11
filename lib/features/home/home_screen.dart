@@ -951,79 +951,142 @@ class _ContinueWatchingSection extends StatelessWidget {
   );
 }
 
-class _ContinueCard extends StatelessWidget {
+class _ContinueCard extends ConsumerStatefulWidget {
   const _ContinueCard({required this.item, required this.width});
   final WatchHistoryItem item;
   final double width;
+
+  @override
+  ConsumerState<_ContinueCard> createState() => _ContinueCardState();
+}
+
+class _ContinueCardState extends ConsumerState<_ContinueCard> {
+  bool _removing = false;
+
+  Future<void> _remove() async {
+    if (_removing) return;
+    setState(() => _removing = true);
+    try {
+      await ref.read(cloudHistoryServiceProvider).remove(widget.item);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã xóa khỏi Xem tiếp.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _removing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không thể xóa khỏi Xem tiếp.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) => TvFocus(
     onTap: () => Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MovieDetailScreen(
-          idOrSlug: item.slug.isNotEmpty ? item.slug : item.movieId.toString(),
+          idOrSlug: widget.item.slug.isNotEmpty
+              ? widget.item.slug
+              : widget.item.movieId.toString(),
         ),
       ),
     ),
     borderRadius: BorderRadius.circular(CineVietRadius.lg),
     child: Container(
-      width: width,
+      width: widget.width,
       padding: const EdgeInsets.all(CineVietSpacing.sm),
       decoration: BoxDecoration(
         color: CineVietColors.card,
         borderRadius: BorderRadius.circular(CineVietRadius.lg),
         border: Border.all(color: CineVietColors.border),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          Container(
-            width: 96,
-            height: double.infinity,
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              color: CineVietColors.bg3,
-              borderRadius: BorderRadius.circular(CineVietRadius.md),
-            ),
-            child:
-                (item.backdropUrl?.isNotEmpty == true ||
-                    item.posterUrl?.isNotEmpty == true)
-                ? CachedNetworkImage(
-                    imageUrl: item.backdropUrl?.isNotEmpty == true
-                        ? item.backdropUrl!
-                        : item.posterUrl!,
-                    fit: BoxFit.cover,
-                  )
-                : const Icon(Icons.movie_rounded, color: CineVietColors.accent),
-          ),
-          const SizedBox(width: CineVietSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w900),
+          Row(
+            children: [
+              Container(
+                width: 96,
+                height: double.infinity,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  color: CineVietColors.bg3,
+                  borderRadius: BorderRadius.circular(CineVietRadius.md),
                 ),
-                const SizedBox(height: CineVietSpacing.xs),
-                Text(
-                  '${item.episodeName} • ${(item.progress * 100).round()}%',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: CineVietColors.textSoft,
-                    fontSize: 12,
+                child:
+                    (widget.item.backdropUrl?.isNotEmpty == true ||
+                        widget.item.posterUrl?.isNotEmpty == true)
+                    ? CachedNetworkImage(
+                        imageUrl: widget.item.backdropUrl?.isNotEmpty == true
+                            ? widget.item.backdropUrl!
+                            : widget.item.posterUrl!,
+                        fit: BoxFit.cover,
+                      )
+                    : const Icon(
+                        Icons.movie_rounded,
+                        color: CineVietColors.accent,
+                      ),
+              ),
+              const SizedBox(width: CineVietSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      widget.item.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: CineVietSpacing.xs),
+                    Text(
+                      '${widget.item.episodeName} • ${(widget.item.progress * 100).round()}%',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: CineVietColors.textSoft,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: CineVietSpacing.sm),
+                    LinearProgressIndicator(
+                      value: widget.item.progress,
+                      backgroundColor: CineVietColors.border,
+                      color: CineVietColors.accent,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          Positioned(
+            top: 0,
+            right: 0,
+            child: Tooltip(
+              message: 'Xóa khỏi Xem tiếp',
+              child: Material(
+                color: Colors.black.withValues(alpha: 0.62),
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: _removing ? null : _remove,
+                  child: SizedBox(
+                    width: 34,
+                    height: 34,
+                    child: _removing
+                        ? const Padding(
+                            padding: EdgeInsets.all(9),
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(
+                            Icons.close_rounded,
+                            size: 20,
+                            color: Colors.white,
+                          ),
                   ),
                 ),
-                const SizedBox(height: CineVietSpacing.sm),
-                LinearProgressIndicator(
-                  value: item.progress,
-                  backgroundColor: CineVietColors.border,
-                  color: CineVietColors.accent,
-                ),
-              ],
+              ),
             ),
           ),
         ],
