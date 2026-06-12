@@ -28,7 +28,8 @@ class CloudHistoryService {
     if (!ref.read(authControllerProvider).loggedIn) {
       return const <WatchHistoryItem>[];
     }
-    await pushLocal();
+    // Khi đã đăng nhập, cloud/backend là nguồn chuẩn để web và app đồng bộ.
+    // Không push local cũ trước khi pull, tránh resurrect phim đã xoá từ web/app khác.
     return pullCloud();
   }
 
@@ -64,20 +65,7 @@ class CloudHistoryService {
           )
           .where((e) => e.movieId > 0 && e.slug.isNotEmpty)
           .toList();
-      final local = await ref.read(watchHistoryServiceProvider).items();
-      final merged = <String, WatchHistoryItem>{};
-      for (final item in local) {
-        merged[item.key] = item;
-      }
-      for (final item in remote) {
-        final existing = merged[item.key];
-        if (existing == null || item.updatedAtMs >= existing.updatedAtMs) {
-          merged[item.key] = item;
-        }
-      }
-      final list = merged.values.toList()
-        ..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
-      final result = list.take(100).toList();
+      final result = remote.take(100).toList();
       await ref.read(watchHistoryServiceProvider).replaceAll(result);
       return result;
     } on DioException {

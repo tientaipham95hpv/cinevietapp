@@ -1034,6 +1034,7 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
             movie: movie,
             server: server,
             episode: server.items[episodeIndex],
+            initialResumeItem: widget.item,
           ),
         ),
       );

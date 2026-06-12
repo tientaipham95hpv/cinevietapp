@@ -26,12 +26,14 @@ class CineVietPlayerScreen extends ConsumerStatefulWidget {
     required this.episode,
     this.watchTogetherState,
     this.watchTogetherCode,
+    this.initialResumeItem,
   });
   final Movie movie;
   final EpisodeServer server;
   final EpisodeItem episode;
   final WatchTogetherState? watchTogetherState;
   final String? watchTogetherCode;
+  final WatchHistoryItem? initialResumeItem;
 
   @override
   ConsumerState<CineVietPlayerScreen> createState() =>
@@ -615,9 +617,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     });
 
     try {
-      _resumeItem = await ref
-          .read(watchHistoryServiceProvider)
-          .find(widget.movie.slug, widget.server.name, widget.episode.name);
+      _resumeItem = widget.initialResumeItem ??
+          await ref
+              .read(watchHistoryServiceProvider)
+              .find(widget.movie.slug, widget.server.name, widget.episode.name);
       final resume = _resumeItem;
       if (resume != null &&
           !resume.completed &&
