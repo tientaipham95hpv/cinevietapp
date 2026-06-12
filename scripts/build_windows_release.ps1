@@ -18,7 +18,7 @@ if (-not (Test-Path $releaseDir)) {
 
 $outDir = 'build\windows\package'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$zip = Join-Path $outDir 'CineViet-Windows-1.0.1.zip'
+$zip = Join-Path $outDir 'CineViet-Windows-1.0.6.zip'
 if (Test-Path $zip) { Remove-Item $zip -Force }
 
 Compress-Archive -Path "$releaseDir\*" -DestinationPath $zip -Force
