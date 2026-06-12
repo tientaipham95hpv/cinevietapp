@@ -983,67 +983,124 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
   }
 
   Future<void> _openResume() async {
-    final idOrSlug = widget.item.slug.isNotEmpty
-        ? widget.item.slug
-        : widget.item.movieId.toString();
-    try {
-      final movie = await ref.read(movieRepositoryProvider).detail(idOrSlug);
-      if (!mounted) return;
-      var serverIndex = widget.item.serverIndex;
-      if (serverIndex < 0 || serverIndex >= movie.episodes.length) {
-        serverIndex = movie.episodes.indexWhere(
-          (s) => s.name == widget.item.serverName,
-        );
+    final idCandidates = <String>[
+      if (widget.item.slug.trim().isNotEmpty) widget.item.slug.trim(),
+      if (widget.item.movieId > 0) widget.item.movieId.toString(),
+    ];
+    Movie? movie;
+    Object? lastError;
+    for (final idOrSlug in idCandidates) {
+      try {
+        movie = await ref.read(movieRepositoryProvider).detail(idOrSlug);
+        break;
+      } catch (error) {
+        lastError = error;
       }
-      if (serverIndex < 0 || serverIndex >= movie.episodes.length) {
-        serverIndex = 0;
-      }
-      final server = movie.episodes.isNotEmpty ? movie.episodes[serverIndex] : null;
-      if (server == null || server.items.isEmpty) {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => MovieDetailScreen(idOrSlug: idOrSlug)),
-        );
-        return;
-      }
-      var episodeIndex = server.items.indexWhere((e) {
-        final savedUrl = widget.item.streamUrl.trim();
-        return savedUrl.isNotEmpty &&
-            (e.linkM3u8 == savedUrl || e.linkEmbed == savedUrl);
-      });
-      if (episodeIndex < 0) {
-        episodeIndex = server.items.indexWhere(
-          (e) =>
-              e.name == widget.item.episodeName ||
-              e.displayName == widget.item.episodeName,
-        );
-      }
-      if (episodeIndex < 0) {
-        final targetEp = widget.item.episodeNumber;
-        episodeIndex = server.items.indexWhere((e) {
-          final haystack = '${e.name} ${e.displayName} ${e.filename ?? ''}';
-          final nums = RegExp(r'\d+').allMatches(haystack).map((m) => int.tryParse(m.group(0) ?? '')).whereType<int>();
-          return nums.contains(targetEp);
-        });
-      }
-      if (episodeIndex < 0 || episodeIndex >= server.items.length) {
-        episodeIndex = 0;
-      }
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => CineVietPlayerScreen(
-            movie: movie,
-            server: server,
-            episode: server.items[episodeIndex],
-            initialResumeItem: widget.item,
-          ),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => MovieDetailScreen(idOrSlug: idOrSlug)),
-      );
     }
+    if (!mounted) return;
+    if (movie == null || movie.episodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Chưa mở được tập đang xem. Vui lòng thử lại.')),
+      );
+      if (lastError != null) debugPrint('Resume open failed: $lastError');
+      return;
+    }
+
+    final savedUrl = widget.item.streamUrl.trim();
+    EpisodeServer? server;
+    EpisodeItem? episode;
+
+    // Ưu tiên tìm chính xác bằng URL stream đã lưu, bất kể server_index cũ có lệch.
+    if (savedUrl.isNotEmpty) {
+      for (final candidateServer in movie.episodes) {
+        for (final candidateEpisode in candidateServer.items) {
+          if (candidateEpisode.linkM3u8 == savedUrl ||
+              candidateEpisode.linkEmbed == savedUrl) {
+            server = candidateServer;
+            episode = candidateEpisode;
+            break;
+          }
+        }
+        if (episode != null) break;
+      }
+    }
+
+    // Sau đó mới dùng server_index/serverName đã lưu.
+    server ??= _resolveResumeServer(movie);
+    if (server == null || server.items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Phim này chưa có nguồn phát để xem tiếp.')),
+      );
+      return;
+    }
+
+    episode ??= _resolveResumeEpisode(server);
+    episode ??= server.items.first;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CineVietPlayerScreen(
+          movie: movie!,
+          server: server!,
+          episode: episode!,
+          initialResumeItem: widget.item,
+        ),
+      ),
+    );
+  }
+
+  EpisodeServer? _resolveResumeServer(Movie movie) {
+    final savedIndex = widget.item.serverIndex;
+    if (savedIndex >= 0 && savedIndex < movie.episodes.length) {
+      return movie.episodes[savedIndex];
+    }
+    final savedName = widget.item.serverName.trim().toLowerCase();
+    if (savedName.isNotEmpty) {
+      final exact = movie.episodes.indexWhere(
+        (s) => s.name.trim().toLowerCase() == savedName,
+      );
+      if (exact >= 0) return movie.episodes[exact];
+      final loose = movie.episodes.indexWhere(
+        (s) => s.name.trim().toLowerCase().contains(savedName) ||
+            savedName.contains(s.name.trim().toLowerCase()),
+      );
+      if (loose >= 0) return movie.episodes[loose];
+    }
+    return movie.episodes.firstWhere(
+      (s) => s.items.isNotEmpty,
+      orElse: () => movie.episodes.first,
+    );
+  }
+
+  EpisodeItem? _resolveResumeEpisode(EpisodeServer server) {
+    final savedName = widget.item.episodeName.trim().toLowerCase();
+    if (savedName.isNotEmpty) {
+      final exact = server.items.indexWhere(
+        (e) => e.name.trim().toLowerCase() == savedName ||
+            e.displayName.trim().toLowerCase() == savedName,
+      );
+      if (exact >= 0) return server.items[exact];
+      final loose = server.items.indexWhere((e) {
+        final n = e.name.trim().toLowerCase();
+        final d = e.displayName.trim().toLowerCase();
+        return n.contains(savedName) || d.contains(savedName) ||
+            savedName.contains(n) || savedName.contains(d);
+      });
+      if (loose >= 0) return server.items[loose];
+    }
+    final targetEp = widget.item.episodeNumber;
+    if (targetEp > 0) {
+      final byNumber = server.items.indexWhere((e) {
+        final haystack = '${e.name} ${e.displayName} ${e.filename ?? ''}';
+        final nums = RegExp(r'\d+')
+            .allMatches(haystack)
+            .map((m) => int.tryParse(m.group(0) ?? ''))
+            .whereType<int>();
+        return nums.contains(targetEp);
+      });
+      if (byNumber >= 0) return server.items[byNumber];
+    }
+    return null;
   }
 
   @override
