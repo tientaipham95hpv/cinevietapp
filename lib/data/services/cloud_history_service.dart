@@ -102,16 +102,15 @@ class CloudHistoryService {
   }
 
   Future<void> remove(WatchHistoryItem item) async {
-    await ref.read(watchHistoryServiceProvider).remove(item.key);
+    final loggedIn = ref.read(authControllerProvider).loggedIn;
+    if (loggedIn) {
+      await ref.read(cineVietApiProvider).dio.delete('/history/${item.movieId}');
+    }
+    // Backend deletes by movie id, so mirror that locally. This also fixes the
+    // last-item case where a stale cloud row could be pulled back immediately.
+    await ref.read(watchHistoryServiceProvider).removeMovie(item.movieId);
     ref.invalidate(watchHistoryProvider);
     ref.invalidate(syncedWatchHistoryProvider);
-    if (!ref.read(authControllerProvider).loggedIn) return;
-    try {
-      await ref
-          .read(cineVietApiProvider)
-          .dio
-          .delete('/history/${item.movieId}');
-    } catch (_) {}
   }
 
   Future<void> clear() async {

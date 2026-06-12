@@ -1005,13 +1005,23 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
         );
         return;
       }
-      var episodeIndex = server.items.indexWhere(
-        (e) => e.name == widget.item.episodeName || e.displayName == widget.item.episodeName,
-      );
+      var episodeIndex = server.items.indexWhere((e) {
+        final savedUrl = widget.item.streamUrl.trim();
+        return savedUrl.isNotEmpty &&
+            (e.linkM3u8 == savedUrl || e.linkEmbed == savedUrl);
+      });
+      if (episodeIndex < 0) {
+        episodeIndex = server.items.indexWhere(
+          (e) =>
+              e.name == widget.item.episodeName ||
+              e.displayName == widget.item.episodeName,
+        );
+      }
       if (episodeIndex < 0) {
         final targetEp = widget.item.episodeNumber;
         episodeIndex = server.items.indexWhere((e) {
-          final nums = RegExp(r'\d+').allMatches(e.name).map((m) => int.tryParse(m.group(0) ?? '')).whereType<int>();
+          final haystack = '${e.name} ${e.displayName} ${e.filename ?? ''}';
+          final nums = RegExp(r'\d+').allMatches(haystack).map((m) => int.tryParse(m.group(0) ?? '')).whereType<int>();
           return nums.contains(targetEp);
         });
       }
