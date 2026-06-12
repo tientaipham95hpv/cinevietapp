@@ -13,6 +13,7 @@ import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cloud_history_service.dart';
 import '../movie_detail/movie_detail_screen.dart';
+import '../player/cineviet_player_screen.dart';
 
 final cinemaMoviesProvider = FutureProvider<List<Movie>>(
   (ref) => ref.watch(movieRepositoryProvider).cinema(limit: 14),
@@ -981,17 +982,62 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
     }
   }
 
+  Future<void> _openResume() async {
+    final idOrSlug = widget.item.slug.isNotEmpty
+        ? widget.item.slug
+        : widget.item.movieId.toString();
+    try {
+      final movie = await ref.read(movieRepositoryProvider).detail(idOrSlug);
+      if (!mounted) return;
+      var serverIndex = widget.item.serverIndex;
+      if (serverIndex < 0 || serverIndex >= movie.episodes.length) {
+        serverIndex = movie.episodes.indexWhere(
+          (s) => s.name == widget.item.serverName,
+        );
+      }
+      if (serverIndex < 0 || serverIndex >= movie.episodes.length) {
+        serverIndex = 0;
+      }
+      final server = movie.episodes.isNotEmpty ? movie.episodes[serverIndex] : null;
+      if (server == null || server.items.isEmpty) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => MovieDetailScreen(idOrSlug: idOrSlug)),
+        );
+        return;
+      }
+      var episodeIndex = server.items.indexWhere(
+        (e) => e.name == widget.item.episodeName || e.displayName == widget.item.episodeName,
+      );
+      if (episodeIndex < 0) {
+        final targetEp = widget.item.episodeNumber;
+        episodeIndex = server.items.indexWhere((e) {
+          final nums = RegExp(r'\d+').allMatches(e.name).map((m) => int.tryParse(m.group(0) ?? '')).whereType<int>();
+          return nums.contains(targetEp);
+        });
+      }
+      if (episodeIndex < 0 || episodeIndex >= server.items.length) {
+        episodeIndex = 0;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CineVietPlayerScreen(
+            movie: movie,
+            server: server,
+            episode: server.items[episodeIndex],
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => MovieDetailScreen(idOrSlug: idOrSlug)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) => TvFocus(
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MovieDetailScreen(
-          idOrSlug: widget.item.slug.isNotEmpty
-              ? widget.item.slug
-              : widget.item.movieId.toString(),
-        ),
-      ),
-    ),
+    onTap: _openResume,
     borderRadius: BorderRadius.circular(CineVietRadius.lg),
     child: Container(
       width: widget.width,

@@ -28,6 +28,7 @@ class WatchHistoryItem {
     this.posterUrl,
     this.backdropUrl,
     required this.serverName,
+    required this.serverIndex,
     required this.episodeName,
     required this.streamUrl,
     required this.positionMs,
@@ -41,6 +42,7 @@ class WatchHistoryItem {
   final String? posterUrl;
   final String? backdropUrl;
   final String serverName;
+  final int serverIndex;
   final String episodeName;
   final String streamUrl;
   final int positionMs;
@@ -65,6 +67,7 @@ class WatchHistoryItem {
     posterUrl: posterUrl,
     backdropUrl: backdropUrl,
     serverName: serverName,
+    serverIndex: serverIndex,
     episodeName: episodeName,
     streamUrl: streamUrl,
     positionMs: positionMs ?? this.positionMs,
@@ -89,6 +92,7 @@ class WatchHistoryItem {
       posterUrl: movie.posterUrl,
       backdropUrl: movie.backdropUrl,
       serverName: server.name,
+      serverIndex: movie.episodes.indexOf(server).clamp(0, 1 << 30),
       episodeName: episode.name,
       streamUrl: streamUrl,
       positionMs: position.inMilliseconds,
@@ -116,6 +120,7 @@ class WatchHistoryItem {
         ? durationSecondsRaw
         : fallbackDurationSeconds;
     final watchedAt = DateTime.tryParse('${json['watched_at'] ?? ''}');
+    final serverIndex = int.tryParse('${json['server_index'] ?? json['serverIndex'] ?? 0}') ?? 0;
     final episodeName = '${json['episode_name'] ?? json['episodeName'] ?? ''}'
         .trim();
     final episodeRaw = '${json['episode'] ?? ''}'.trim();
@@ -131,6 +136,7 @@ class WatchHistoryItem {
       posterUrl: _cleanMediaUrl(poster),
       backdropUrl: _cleanMediaUrl(backdrop),
       serverName: _bestServerName(json),
+      serverIndex: serverIndex < 0 ? 0 : serverIndex,
       episodeName: episodeName.isNotEmpty ? episodeName : 'Tập $episodeRaw',
       streamUrl: '${json['stream_url'] ?? json['streamUrl'] ?? ''}',
       positionMs: (positionSeconds * 1000).round(),
@@ -149,6 +155,7 @@ class WatchHistoryItem {
         posterUrl: json['posterUrl']?.toString(),
         backdropUrl: json['backdropUrl']?.toString(),
         serverName: '${json['serverName'] ?? 'Server'}',
+        serverIndex: int.tryParse('${json['serverIndex'] ?? json['server_index'] ?? 0}') ?? 0,
         episodeName: '${json['episodeName'] ?? 'Tập'}',
         streamUrl: '${json['streamUrl'] ?? ''}',
         positionMs: int.tryParse('${json['positionMs'] ?? 0}') ?? 0,
@@ -164,9 +171,12 @@ class WatchHistoryItem {
     'position_seconds': positionMs / 1000,
     'duration_seconds': durationMs / 1000,
     'server_name': serverName,
+    'server_index': serverIndex,
     'episode_name': episodeName,
     'stream_url': streamUrl,
   };
+
+  int get episodeNumber => _episodeNumber;
 
   int get _episodeNumber {
     final matches = RegExp(r'\d+').allMatches(episodeName).toList();
@@ -181,6 +191,7 @@ class WatchHistoryItem {
     'posterUrl': posterUrl,
     'backdropUrl': backdropUrl,
     'serverName': serverName,
+    'serverIndex': serverIndex,
     'episodeName': episodeName,
     'streamUrl': streamUrl,
     'positionMs': positionMs,
