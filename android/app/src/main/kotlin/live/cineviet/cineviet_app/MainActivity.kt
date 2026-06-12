@@ -22,6 +22,10 @@ class MainActivity : FlutterActivity() {
                 "set" -> {
                     val value = (call.argument<Double>("value") ?: 0.5).coerceIn(0.0, 1.0)
                     applyBrightness(value)
+                    result.success(currentAppliedBrightness())
+                }
+                "reset" -> {
+                    resetBrightness()
                     result.success(currentBrightness())
                 }
                 "getVolume" -> result.success(currentMusicVolume())
@@ -57,11 +61,22 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun applyBrightness(@Suppress("UNUSED_PARAMETER") value: Double) {
+    private fun currentAppliedBrightness(): Double {
+        val applied = window.attributes.screenBrightness
+        return if (applied >= 0f) applied.toDouble().coerceIn(0.0, 1.0) else currentBrightness()
+    }
+
+    private fun applyBrightness(value: Double) {
+        val params = window.attributes
+        params.screenBrightness = value.toFloat().coerceIn(0f, 1f)
+        window.attributes = params
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    private fun resetBrightness() {
         val params = window.attributes
         params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         window.attributes = params
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     private fun currentMusicVolume(): Double {

@@ -36,8 +36,11 @@ import UIKit
         case "get":
           result(Double(UIScreen.main.brightness))
         case "set":
-          // Keep app brightness synced with the device setting. Do not override
-          // UIScreen.main.brightness from the player gesture.
+          let value = self?.doubleArg(call.arguments, key: "value", fallback: Double(UIScreen.main.brightness)) ?? Double(UIScreen.main.brightness)
+          UIScreen.main.brightness = CGFloat(max(0.0, min(1.0, value)))
+          result(Double(UIScreen.main.brightness))
+        case "reset":
+          // iOS has no per-window brightness override, so return the current system brightness.
           result(Double(UIScreen.main.brightness))
         case "getVolume":
           result(Double(AVAudioSession.sharedInstance().outputVolume))

@@ -55,7 +55,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   bool _controlsLocked = false;
   _PlayerFitMode _fitMode = _PlayerFitMode.cover;
   double _appVolume = 1.0;
-  double _screenBrightness = 1.0; // UI indicator only; actual brightness follows device.
+  double _screenBrightness = 1.0;
   Timer? _gestureHintTimer;
   Timer? _hideTimer;
   Timer? _progressTimer;
@@ -667,6 +667,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
     _controller?.removeListener(_syncPlayerState);
     _controller?.dispose();
+    unawaited(_resetScreenBrightness());
     if (!_switchingEpisode) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       SystemChrome.setPreferredOrientations([
@@ -864,10 +865,15 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       if (mounted && brightness != null) {
         setState(() => _screenBrightness = brightness.clamp(0.0, 1.0));
       }
-      await _brightnessChannel.invokeMethod<double>('set', {'value': brightness ?? 1.0});
     } catch (_) {
       if (mounted) setState(() => _screenBrightness = 1.0);
     }
+  }
+
+  Future<void> _resetScreenBrightness() async {
+    try {
+      await _brightnessChannel.invokeMethod<double>('reset');
+    } catch (_) {}
   }
 
   Future<double?> _setScreenBrightness(double value) async {
@@ -1013,10 +1019,14 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final change = -dy / size.height * 1.35;
     final isLeft = start.dx < size.width / 2;
     if (isLeft) {
+      final next = (_screenBrightness + change).clamp(0.0, 1.0);
       setState(() {
+        _screenBrightness = next;
         _gestureMode = 'brightness';
-        _gestureValue = _screenBrightness.clamp(0.0, 1.0);
+        _gestureValue = next;
       });
+      _pendingBrightness = next;
+      _scheduleLevelApply();
       _armGestureHideTimer();
     } else {
       final next = (_appVolume + change).clamp(0.0, 1.0);
