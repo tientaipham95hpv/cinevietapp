@@ -12,7 +12,6 @@ import '../../data/models/watch_history.dart';
 import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cloud_history_service.dart';
-import '../movie_detail/movie_detail_screen.dart';
 import '../player/resume_navigation.dart';
 
 final cinemaMoviesProvider = FutureProvider<List<Movie>>(
@@ -600,7 +599,7 @@ class _HeroArrow extends StatelessWidget {
   );
 }
 
-class _HeroButton extends StatelessWidget {
+class _HeroButton extends ConsumerWidget {
   const _HeroButton({
     required this.movie,
     required this.label,
@@ -611,7 +610,7 @@ class _HeroButton extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) => FilledButton.icon(
+  Widget build(BuildContext context, WidgetRef ref) => FilledButton.icon(
     style: FilledButton.styleFrom(
       backgroundColor: CineVietColors.accent,
       foregroundColor: CineVietColors.bg,
@@ -624,7 +623,7 @@ class _HeroButton extends StatelessWidget {
         side: BorderSide(color: CineVietColors.accent),
       ),
     ),
-    onPressed: () => _openMovie(context, movie),
+    onPressed: () => openMovieOrResume(context, ref, movie),
     icon: Icon(icon),
     label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
   );
@@ -758,14 +757,14 @@ class _MovieRail extends StatelessWidget {
   }
 }
 
-class _RealMovieCard extends StatelessWidget {
+class _RealMovieCard extends ConsumerWidget {
   const _RealMovieCard({required this.movie, required this.width});
   final Movie movie;
   final double width;
 
   @override
-  Widget build(BuildContext context) => TvFocus(
-    onTap: () => _openMovie(context, movie),
+  Widget build(BuildContext context, WidgetRef ref) => TvFocus(
+    onTap: () => openMovieOrResume(context, ref, movie),
     borderRadius: BorderRadius.circular(CineVietRadius.xl),
     padding: const EdgeInsets.all(CineVietSpacing.xs),
     scale: 1.025,
@@ -1142,12 +1141,3 @@ String _compactLanguage(String text) => text
     .replaceAll('Thuyết Minh', 'TM')
     .replaceAll('Lồng Tiếng', 'LT');
 
-void _openMovie(BuildContext context, Movie movie) {
-  Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => MovieDetailScreen(
-        idOrSlug: movie.slug.isNotEmpty ? movie.slug : movie.id.toString(),
-      ),
-    ),
-  );
-}
