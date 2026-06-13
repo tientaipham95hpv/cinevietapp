@@ -16,6 +16,7 @@ import '../../data/models/watch_history.dart';
 import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cloud_history_service.dart';
+import '../../data/services/watch_history_service.dart';
 import '../../data/services/playlist_service.dart';
 import '../../data/services/social_service.dart';
 
@@ -71,6 +72,12 @@ class MovieDetailScreen extends ConsumerWidget {
   }
 }
 
+
+
+String _resumeMatchText(String value) => value
+    .toLowerCase()
+    .replaceAll(RegExp(r'[^a-z0-9\u00c0-\u1ef9]+', unicode: true), ' ')
+    .trim();
 
 class _MovieDetailContent extends ConsumerStatefulWidget {
   const _MovieDetailContent({required this.movie});
@@ -147,9 +154,24 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
   }
 
   WatchHistoryItem? _resumeItemForMovie(List<WatchHistoryItem> items) {
+    final movieSlug = movie.slug.trim().toLowerCase();
+    final movieTitle = _resumeMatchText(movie.title);
+    final movieTitleEn = _resumeMatchText(movie.titleEn ?? '');
     for (final item in items) {
-      if (item.movieId == movie.id ||
-          (movie.slug.isNotEmpty && item.slug == movie.slug)) {
+      final itemSlug = item.slug.trim().toLowerCase();
+      final itemTitle = _resumeMatchText(item.title);
+      if (item.movieId > 0 && movie.id > 0 && item.movieId == movie.id) {
+        return item;
+      }
+      if (movieSlug.isNotEmpty && itemSlug.isNotEmpty && itemSlug == movieSlug) {
+        return item;
+      }
+      if (movieTitle.isNotEmpty && itemTitle.isNotEmpty &&
+          (itemTitle == movieTitle || itemTitle.contains(movieTitle) || movieTitle.contains(itemTitle))) {
+        return item;
+      }
+      if (movieTitleEn.isNotEmpty && itemTitle.isNotEmpty &&
+          (itemTitle == movieTitleEn || itemTitle.contains(movieTitleEn) || movieTitleEn.contains(itemTitle))) {
         return item;
       }
     }
@@ -234,9 +256,13 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
         .watch(favoriteIdsProvider)
         .maybeWhen(data: (ids) => ids, orElse: () => <int>{});
     final isFavorite = favoriteIds.contains(movie.id);
-    final resumeItem = ref
+    final localResumeItem = ref
+        .watch(watchHistoryProvider)
+        .maybeWhen(data: _resumeItemForMovie, orElse: () => null);
+    final cloudResumeItem = ref
         .watch(syncedWatchHistoryProvider)
         .maybeWhen(data: _resumeItemForMovie, orElse: () => null);
+    final resumeItem = localResumeItem ?? cloudResumeItem;
     final resumeEpisode = resumeItem?.episodeName.trim();
     final padding = platform.isMobile ? CineVietSpacing.md : CineVietSpacing.xl;
     final heroHeight = platform.isMobile
