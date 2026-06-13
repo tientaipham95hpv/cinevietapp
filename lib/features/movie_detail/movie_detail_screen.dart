@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../player/cineviet_player_screen.dart';
+import '../player/resume_player_loader_screen.dart';
 import '../search/search_browse_screen.dart';
 import '../watch_together/watch_together_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +14,7 @@ import '../../core/widgets/tv_focus.dart';
 import '../../data/models/movie.dart';
 import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
+import '../../data/services/cloud_history_service.dart';
 import '../../data/services/playlist_service.dart';
 import '../../data/services/social_service.dart';
 
@@ -62,10 +64,54 @@ class MovieDetailScreen extends ConsumerWidget {
             ),
           ),
         ),
-        data: (movie) => _MovieDetailContent(movie: movie),
+        data: (movie) => _AutoResumeDetail(movie: movie),
       ),
     );
   }
+}
+
+
+class _AutoResumeDetail extends ConsumerStatefulWidget {
+  const _AutoResumeDetail({required this.movie});
+  final Movie movie;
+
+  @override
+  ConsumerState<_AutoResumeDetail> createState() => _AutoResumeDetailState();
+}
+
+class _AutoResumeDetailState extends ConsumerState<_AutoResumeDetail> {
+  bool _checked = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_checked) return;
+    _checked = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _resumeIfWatched());
+  }
+
+  Future<void> _resumeIfWatched() async {
+    try {
+      final history = await ref.read(syncedWatchHistoryProvider.future);
+      for (final item in history) {
+        if (item.movieId == widget.movie.id ||
+            (widget.movie.slug.isNotEmpty && item.slug == widget.movie.slug)) {
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => ResumePlayerLoaderScreen(item: item),
+            ),
+          );
+          return;
+        }
+      }
+    } catch (_) {
+      // If history cannot be loaded, keep the normal detail page usable.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => _MovieDetailContent(movie: widget.movie);
 }
 
 class _MovieDetailContent extends ConsumerStatefulWidget {
