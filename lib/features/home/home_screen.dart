@@ -1000,7 +1000,7 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
     if (!mounted) return;
     if (movie == null || movie.episodes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Chưa mở được tập đang xem. Vui lòng thử lại.')),
+        const SnackBar(content: Text('CV_RESUME_PLAYER_7062: Chưa mở được tập đang xem.')),
       );
       if (lastError != null) debugPrint('Resume open failed: $lastError');
       return;
@@ -1107,7 +1107,10 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
   Widget build(BuildContext context) => TvFocus(
     onTap: _openResume,
     borderRadius: BorderRadius.circular(CineVietRadius.lg),
-    child: Container(
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _openResume,
+      child: Container(
       width: widget.width,
       padding: const EdgeInsets.all(CineVietSpacing.sm),
       decoration: BoxDecoration(
@@ -1204,6 +1207,7 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
             ),
           ),
         ],
+      ),
       ),
     ),
   );
