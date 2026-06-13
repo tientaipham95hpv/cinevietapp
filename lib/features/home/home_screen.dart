@@ -13,7 +13,7 @@ import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cloud_history_service.dart';
 import '../movie_detail/movie_detail_screen.dart';
-import '../player/resume_player_loader_screen.dart';
+import '../player/resume_navigation.dart';
 
 final cinemaMoviesProvider = FutureProvider<List<Movie>>(
   (ref) => ref.watch(movieRepositoryProvider).cinema(limit: 14),
@@ -982,13 +982,7 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
     }
   }
 
-  Future<void> _openResume() async {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ResumePlayerLoaderScreen(item: widget.item),
-      ),
-    );
-  }
+  Future<void> _openResume() => openWatchHistoryItem(context, widget.item);
 
 
 
