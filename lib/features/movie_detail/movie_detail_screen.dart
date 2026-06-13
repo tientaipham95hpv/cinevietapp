@@ -12,6 +12,7 @@ import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
 import '../../core/widgets/tv_focus.dart';
 import '../../data/models/movie.dart';
+import '../../data/models/watch_history.dart';
 import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cloud_history_service.dart';
@@ -64,55 +65,12 @@ class MovieDetailScreen extends ConsumerWidget {
             ),
           ),
         ),
-        data: (movie) => _AutoResumeDetail(movie: movie),
+        data: (movie) => _MovieDetailContent(movie: movie),
       ),
     );
   }
 }
 
-
-class _AutoResumeDetail extends ConsumerStatefulWidget {
-  const _AutoResumeDetail({required this.movie});
-  final Movie movie;
-
-  @override
-  ConsumerState<_AutoResumeDetail> createState() => _AutoResumeDetailState();
-}
-
-class _AutoResumeDetailState extends ConsumerState<_AutoResumeDetail> {
-  bool _checked = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_checked) return;
-    _checked = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _resumeIfWatched());
-  }
-
-  Future<void> _resumeIfWatched() async {
-    try {
-      final history = await ref.read(syncedWatchHistoryProvider.future);
-      for (final item in history) {
-        if (item.movieId == widget.movie.id ||
-            (widget.movie.slug.isNotEmpty && item.slug == widget.movie.slug)) {
-          if (!mounted) return;
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (_) => ResumePlayerLoaderScreen(item: item),
-            ),
-          );
-          return;
-        }
-      }
-    } catch (_) {
-      // If history cannot be loaded, keep the normal detail page usable.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) => _MovieDetailContent(movie: widget.movie);
-}
 
 class _MovieDetailContent extends ConsumerStatefulWidget {
   const _MovieDetailContent({required this.movie});
@@ -188,6 +146,24 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
     );
   }
 
+  WatchHistoryItem? _resumeItemForMovie(List<WatchHistoryItem> items) {
+    for (final item in items) {
+      if (item.movieId == movie.id ||
+          (movie.slug.isNotEmpty && item.slug == movie.slug)) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _openResume(WatchHistoryItem item) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ResumePlayerLoaderScreen(item: item),
+      ),
+    );
+  }
+
   void _openWatchTogether() {
     final server = movie.episodes.isNotEmpty ? movie.episodes.first : null;
     final episode = server?.items.isNotEmpty == true
@@ -258,6 +234,10 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
         .watch(favoriteIdsProvider)
         .maybeWhen(data: (ids) => ids, orElse: () => <int>{});
     final isFavorite = favoriteIds.contains(movie.id);
+    final resumeItem = ref
+        .watch(syncedWatchHistoryProvider)
+        .maybeWhen(data: _resumeItemForMovie, orElse: () => null);
+    final resumeEpisode = resumeItem?.episodeName.trim();
     final padding = platform.isMobile ? CineVietSpacing.md : CineVietSpacing.xl;
     final heroHeight = platform.isMobile
         ? 760.0
@@ -390,7 +370,12 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                                 canPlay:
                                     movie.episodes.isNotEmpty &&
                                     movie.episodes.first.items.isNotEmpty,
-                                onPlay: () => _openEpisode(0, 0),
+                                playLabel: resumeItem != null
+                                    ? 'Xem tiếp${resumeEpisode != null && resumeEpisode.isNotEmpty ? ' $resumeEpisode' : ''}'
+                                    : 'Xem ngay',
+                                onPlay: resumeItem != null
+                                    ? () => _openResume(resumeItem)
+                                    : () => _openEpisode(0, 0),
                                 onWatchTogether: _openWatchTogether,
                                 onFavorite: () => _toggleFavorite(isFavorite),
                                 onPlaylist: _showAddToPlaylist,
@@ -438,6 +423,7 @@ class _MovieActionGrid extends StatelessWidget {
     required this.isDesktop,
     required this.isFavorite,
     required this.canPlay,
+    required this.playLabel,
     required this.onPlay,
     required this.onWatchTogether,
     required this.onFavorite,
@@ -450,6 +436,7 @@ class _MovieActionGrid extends StatelessWidget {
   final bool isDesktop;
   final bool isFavorite;
   final bool canPlay;
+  final String playLabel;
   final VoidCallback onPlay;
   final VoidCallback onWatchTogether;
   final VoidCallback onFavorite;
@@ -462,7 +449,7 @@ class _MovieActionGrid extends StatelessWidget {
       FilledButton.icon(
         onPressed: canPlay ? onPlay : null,
         icon: const Icon(Icons.play_arrow_rounded),
-        label: const Text('Xem ngay'),
+        label: Text(playLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
       ),
       OutlinedButton.icon(
         onPressed: canPlay ? onWatchTogether : null,
