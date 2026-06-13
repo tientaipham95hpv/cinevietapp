@@ -13,7 +13,7 @@ import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cloud_history_service.dart';
 import '../movie_detail/movie_detail_screen.dart';
-import '../player/cineviet_player_screen.dart';
+import '../player/resume_player_loader_screen.dart';
 
 final cinemaMoviesProvider = FutureProvider<List<Movie>>(
   (ref) => ref.watch(movieRepositoryProvider).cinema(limit: 14),
@@ -983,125 +983,14 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
   }
 
   Future<void> _openResume() async {
-    final idCandidates = <String>[
-      if (widget.item.slug.trim().isNotEmpty) widget.item.slug.trim(),
-      if (widget.item.movieId > 0) widget.item.movieId.toString(),
-    ];
-    Movie? movie;
-    Object? lastError;
-    for (final idOrSlug in idCandidates) {
-      try {
-        movie = await ref.read(movieRepositoryProvider).detail(idOrSlug);
-        break;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    if (!mounted) return;
-    if (movie == null || movie.episodes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('CV_RESUME_PLAYER_7062: Chưa mở được tập đang xem.')),
-      );
-      if (lastError != null) debugPrint('Resume open failed: $lastError');
-      return;
-    }
-
-    final savedUrl = widget.item.streamUrl.trim();
-    EpisodeServer? server;
-    EpisodeItem? episode;
-
-    // Ưu tiên tìm chính xác bằng URL stream đã lưu, bất kể server_index cũ có lệch.
-    if (savedUrl.isNotEmpty) {
-      for (final candidateServer in movie.episodes) {
-        for (final candidateEpisode in candidateServer.items) {
-          if (candidateEpisode.linkM3u8 == savedUrl ||
-              candidateEpisode.linkEmbed == savedUrl) {
-            server = candidateServer;
-            episode = candidateEpisode;
-            break;
-          }
-        }
-        if (episode != null) break;
-      }
-    }
-
-    // Sau đó mới dùng server_index/serverName đã lưu.
-    server ??= _resolveResumeServer(movie);
-    if (server == null || server.items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Phim này chưa có nguồn phát để xem tiếp.')),
-      );
-      return;
-    }
-
-    episode ??= _resolveResumeEpisode(server);
-    episode ??= server.items.first;
-
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CineVietPlayerScreen(
-          movie: movie!,
-          server: server!,
-          episode: episode!,
-          initialResumeItem: widget.item,
-        ),
+        builder: (_) => ResumePlayerLoaderScreen(item: widget.item),
       ),
     );
   }
 
-  EpisodeServer? _resolveResumeServer(Movie movie) {
-    final savedIndex = widget.item.serverIndex;
-    if (savedIndex >= 0 && savedIndex < movie.episodes.length) {
-      return movie.episodes[savedIndex];
-    }
-    final savedName = widget.item.serverName.trim().toLowerCase();
-    if (savedName.isNotEmpty) {
-      final exact = movie.episodes.indexWhere(
-        (s) => s.name.trim().toLowerCase() == savedName,
-      );
-      if (exact >= 0) return movie.episodes[exact];
-      final loose = movie.episodes.indexWhere(
-        (s) => s.name.trim().toLowerCase().contains(savedName) ||
-            savedName.contains(s.name.trim().toLowerCase()),
-      );
-      if (loose >= 0) return movie.episodes[loose];
-    }
-    return movie.episodes.firstWhere(
-      (s) => s.items.isNotEmpty,
-      orElse: () => movie.episodes.first,
-    );
-  }
 
-  EpisodeItem? _resolveResumeEpisode(EpisodeServer server) {
-    final savedName = widget.item.episodeName.trim().toLowerCase();
-    if (savedName.isNotEmpty) {
-      final exact = server.items.indexWhere(
-        (e) => e.name.trim().toLowerCase() == savedName ||
-            e.displayName.trim().toLowerCase() == savedName,
-      );
-      if (exact >= 0) return server.items[exact];
-      final loose = server.items.indexWhere((e) {
-        final n = e.name.trim().toLowerCase();
-        final d = e.displayName.trim().toLowerCase();
-        return n.contains(savedName) || d.contains(savedName) ||
-            savedName.contains(n) || savedName.contains(d);
-      });
-      if (loose >= 0) return server.items[loose];
-    }
-    final targetEp = widget.item.episodeNumber;
-    if (targetEp > 0) {
-      final byNumber = server.items.indexWhere((e) {
-        final haystack = '${e.name} ${e.displayName} ${e.filename ?? ''}';
-        final nums = RegExp(r'\d+')
-            .allMatches(haystack)
-            .map((m) => int.tryParse(m.group(0) ?? ''))
-            .whereType<int>();
-        return nums.contains(targetEp);
-      });
-      if (byNumber >= 0) return server.items[byNumber];
-    }
-    return null;
-  }
 
   @override
   Widget build(BuildContext context) => TvFocus(
