@@ -13,6 +13,7 @@ import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cloud_history_service.dart';
 import '../movie_detail/movie_detail_screen.dart';
+import '../player/cineviet_player_screen.dart';
 
 final cinemaMoviesProvider = FutureProvider<List<Movie>>(
   (ref) => ref.watch(movieRepositoryProvider).cinema(limit: 14),
@@ -951,20 +952,51 @@ class _ContinueWatchingSection extends StatelessWidget {
   );
 }
 
-class _ContinueCard extends StatelessWidget {
+class _ContinueCard extends ConsumerWidget {
   const _ContinueCard({required this.item, required this.width});
   final WatchHistoryItem item;
   final double width;
 
-  @override
-  Widget build(BuildContext context) => TvFocus(
-    onTap: () => Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => MovieDetailScreen(
-          idOrSlug: item.slug.isNotEmpty ? item.slug : item.movieId.toString(),
+  Future<void> _openResume(BuildContext context, WidgetRef ref) async {
+    try {
+      final movie = await ref.read(movieRepositoryProvider).detail(
+        item.slug.isNotEmpty ? item.slug : item.movieId.toString(),
+      );
+      if (!context.mounted) return;
+      var serverIndex = item.serverIndex;
+      if (serverIndex < 0 || serverIndex >= movie.episodes.length) {
+        serverIndex = movie.episodes.indexWhere((s) => s.name == item.serverName);
+      }
+      if (serverIndex < 0 || serverIndex >= movie.episodes.length) serverIndex = 0;
+      final server = movie.episodes.isNotEmpty ? movie.episodes[serverIndex] : null;
+      if (server == null || server.items.isEmpty) {
+        Navigator.of(context).push(MaterialPageRoute(builder: (_) => MovieDetailScreen(idOrSlug: item.slug.isNotEmpty ? item.slug : item.movieId.toString())));
+        return;
+      }
+      var episodeIndex = server.items.indexWhere((e) => e.name == item.episodeName || e.displayName == item.episodeName);
+      if (episodeIndex < 0) {
+        final targetEp = item.episodeNumber;
+        episodeIndex = server.items.indexWhere((e) => RegExp(r'\d+').allMatches(e.name).map((m) => int.tryParse(m.group(0) ?? '')).whereType<int>().contains(targetEp));
+      }
+      if (episodeIndex < 0 || episodeIndex >= server.items.length) episodeIndex = 0;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => CineVietPlayerScreen(
+            movie: movie,
+            server: server,
+            episode: server.items[episodeIndex],
+          ),
         ),
-      ),
-    ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => MovieDetailScreen(idOrSlug: item.slug.isNotEmpty ? item.slug : item.movieId.toString())));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => TvFocus(
+    onTap: () => _openResume(context, ref),
     borderRadius: BorderRadius.circular(CineVietRadius.lg),
     child: Container(
       width: width,
