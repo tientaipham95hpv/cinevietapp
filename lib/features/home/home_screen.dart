@@ -39,6 +39,9 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
+  final FocusScopeNode _contentFocusScope = FocusScopeNode(
+    debugLabel: 'homeContent',
+  );
   final Set<String> _prefetchedPosters = <String>{};
 
   @override
@@ -50,6 +53,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
+    _contentFocusScope.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -60,6 +64,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     final platform = PlatformDetector.of(context);
     if (!platform.isTv && !platform.isDesktop) return false;
+    // Chỉ cuộn home khi focus thực sự nằm trong nội dung home. Nếu focus đang ở
+    // sidebar (chọn menu), không cuộn danh sách phim theo.
+    if (!_contentFocusScope.hasFocus) return false;
 
     final current = _scrollController.offset;
     final max = _scrollController.position.maxScrollExtent;
@@ -145,7 +152,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? 560.0
         : 640.0;
 
-    return RefreshIndicator(
+    return FocusScope(
+      node: _contentFocusScope,
+      child: RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(featuredMoviesProvider);
         ref.invalidate(latestMoviesProvider);
@@ -235,6 +244,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

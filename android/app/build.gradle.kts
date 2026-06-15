@@ -1,5 +1,6 @@
 import java.util.Properties
 import java.io.FileInputStream
+import com.android.build.gradle.internal.api.ApkVariantOutputImpl
 
 plugins {
     id("com.android.application")
@@ -62,6 +63,17 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+
+    // Ép MỌI APK (mọi ABI khi split-per-abi, và bản universal/TV) dùng cùng
+    // versionCode = số build từ Flutter (vd 7070), bỏ offset ABI mặc định
+    // (armv7 +1000, arm64 +2000, x86_64 +4000). Nhờ vậy mọi nền tảng report
+    // cùng một build number, backend chỉ cần 1 latestBuild => không nhắc
+    // update nhầm cho máy đã cài bản mới nhất.
+    applicationVariants.all {
+        outputs.all {
+            (this as ApkVariantOutputImpl).versionCodeOverride = flutter.versionCode
         }
     }
 }
