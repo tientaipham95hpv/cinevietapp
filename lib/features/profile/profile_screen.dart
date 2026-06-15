@@ -6,7 +6,9 @@ import '../../core/services/desktop_oauth_service.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
 import '../../data/services/auth_service.dart';
+import '../../data/services/cloud_history_service.dart';
 import '../../data/repositories/movie_repository.dart';
+import '../player/resume_navigation.dart';
 import '../tv_pairing/mobile_pairing_screen.dart';
 import '../tv_pairing/tv_pairing_screen.dart';
 import '../about/about_screen.dart';
@@ -177,6 +179,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           const SizedBox(height: CineVietSpacing.md),
           _pairingActionsCard(auth.loggedIn, platform.isTv),
           const SizedBox(height: CineVietSpacing.lg),
+          _watchHistoryCard(),
+          const SizedBox(height: CineVietSpacing.lg),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -200,6 +204,57 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           ),
         ],
       ),
+    );
+  }
+
+
+  Widget _watchHistoryCard() {
+    final history = ref.watch(syncedWatchHistoryProvider);
+    return history.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (items) {
+        final shown = items.take(5).toList(growable: false);
+        if (shown.isEmpty) return const SizedBox.shrink();
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(CineVietSpacing.md),
+          decoration: BoxDecoration(
+            color: CineVietColors.bg2,
+            borderRadius: BorderRadius.circular(CineVietRadius.lg),
+            border: Border.all(color: CineVietColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Lịch sử xem',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: CineVietSpacing.sm),
+              for (final item in shown)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.play_circle_fill_rounded,
+                    color: CineVietColors.accent,
+                  ),
+                  title: Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${item.episodeName} • ${(item.progress * 100).round()}%',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => openWatchHistoryItem(context, item),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 

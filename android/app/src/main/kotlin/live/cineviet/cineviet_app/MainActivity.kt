@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
@@ -23,6 +22,10 @@ class MainActivity : FlutterActivity() {
                 "set" -> {
                     val value = (call.argument<Double>("value") ?: 0.5).coerceIn(0.0, 1.0)
                     applyBrightness(value)
+                    result.success(currentAppliedBrightness())
+                }
+                "reset" -> {
+                    resetBrightness()
                     result.success(currentBrightness())
                 }
                 "getVolume" -> result.success(currentMusicVolume())
@@ -49,35 +52,31 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun currentBrightness(): Double {
-        val windowValue = window.attributes.screenBrightness
-        if (windowValue >= 0f) return windowValue.toDouble().coerceIn(0.0, 1.0)
         return try {
             Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS).toDouble()
                 .div(255.0)
                 .coerceIn(0.0, 1.0)
         } catch (_: Exception) {
-            0.5
+            1.0
         }
     }
 
+    private fun currentAppliedBrightness(): Double {
+        val applied = window.attributes.screenBrightness
+        return if (applied >= 0f) applied.toDouble().coerceIn(0.0, 1.0) else currentBrightness()
+    }
+
     private fun applyBrightness(value: Double) {
-        val clamped = value.coerceIn(0.0, 1.0).toFloat()
         val params = window.attributes
-        params.screenBrightness = clamped
+        params.screenBrightness = value.toFloat().coerceIn(0f, 1f)
         window.attributes = params
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
 
-        try {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.System.canWrite(this)) {
-                Settings.System.putInt(
-                    contentResolver,
-                    Settings.System.SCREEN_BRIGHTNESS,
-                    Math.round(clamped * 255).coerceIn(0, 255)
-                )
-            }
-        } catch (_: Exception) {
-            // Without WRITE_SETTINGS grant Android still applies per-window brightness.
-        }
+    private fun resetBrightness() {
+        val params = window.attributes
+        params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        window.attributes = params
     }
 
     private fun currentMusicVolume(): Double {

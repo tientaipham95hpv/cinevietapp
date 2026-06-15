@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../player/cineviet_player_screen.dart';
+import '../player/resume_player_loader_screen.dart';
 import '../search/search_browse_screen.dart';
 import '../watch_together/watch_together_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,8 +12,11 @@ import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
 import '../../core/widgets/tv_focus.dart';
 import '../../data/models/movie.dart';
+import '../../data/models/watch_history.dart';
 import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
+import '../../data/services/cloud_history_service.dart';
+import '../../data/services/watch_history_service.dart';
 import '../../data/services/playlist_service.dart';
 import '../../data/services/social_service.dart';
 
@@ -67,6 +71,13 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 }
+
+
+
+String _resumeMatchText(String value) => value
+    .toLowerCase()
+    .replaceAll(RegExp(r'[^a-z0-9\u00c0-\u1ef9]+', unicode: true), ' ')
+    .trim();
 
 class _MovieDetailContent extends ConsumerStatefulWidget {
   const _MovieDetailContent({required this.movie});
@@ -138,6 +149,39 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
           server: server,
           episode: episode,
         ),
+      ),
+    );
+  }
+
+  WatchHistoryItem? _resumeItemForMovie(List<WatchHistoryItem> items) {
+    final movieSlug = movie.slug.trim().toLowerCase();
+    final movieTitle = _resumeMatchText(movie.title);
+    final movieTitleEn = _resumeMatchText(movie.titleEn ?? '');
+    for (final item in items) {
+      final itemSlug = item.slug.trim().toLowerCase();
+      final itemTitle = _resumeMatchText(item.title);
+      if (item.movieId > 0 && movie.id > 0 && item.movieId == movie.id) {
+        return item;
+      }
+      if (movieSlug.isNotEmpty && itemSlug.isNotEmpty && itemSlug == movieSlug) {
+        return item;
+      }
+      if (movieTitle.isNotEmpty && itemTitle.isNotEmpty &&
+          (itemTitle == movieTitle || itemTitle.contains(movieTitle) || movieTitle.contains(itemTitle))) {
+        return item;
+      }
+      if (movieTitleEn.isNotEmpty && itemTitle.isNotEmpty &&
+          (itemTitle == movieTitleEn || itemTitle.contains(movieTitleEn) || movieTitleEn.contains(itemTitle))) {
+        return item;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _openResume(WatchHistoryItem item) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ResumePlayerLoaderScreen(item: item),
       ),
     );
   }
@@ -219,6 +263,14 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
         .watch(favoriteIdsProvider)
         .maybeWhen(data: (ids) => ids, orElse: () => <int>{});
     final isFavorite = favoriteIds.contains(movie.id);
+    final localResumeItem = ref
+        .watch(watchHistoryProvider)
+        .maybeWhen(data: _resumeItemForMovie, orElse: () => null);
+    final cloudResumeItem = ref
+        .watch(syncedWatchHistoryProvider)
+        .maybeWhen(data: _resumeItemForMovie, orElse: () => null);
+    final resumeItem = localResumeItem ?? cloudResumeItem;
+    final resumeEpisode = resumeItem?.episodeName.trim();
     final padding = platform.isMobile ? CineVietSpacing.md : CineVietSpacing.xl;
     final heroHeight = platform.isMobile
         ? 760.0
@@ -351,7 +403,12 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                                 canPlay:
                                     movie.episodes.isNotEmpty &&
                                     movie.episodes.first.items.isNotEmpty,
-                                onPlay: () => _openEpisode(0, 0),
+                                playLabel: resumeItem != null
+                                    ? 'Xem tiếp${resumeEpisode != null && resumeEpisode.isNotEmpty ? ' $resumeEpisode' : ''}'
+                                    : 'Xem ngay',
+                                onPlay: resumeItem != null
+                                    ? () => _openResume(resumeItem)
+                                    : () => _openEpisode(0, 0),
                                 onWatchTogether: _openWatchTogether,
                                 onFavorite: () => _toggleFavorite(isFavorite),
                                 onPlaylist: _showAddToPlaylist,
@@ -399,6 +456,7 @@ class _MovieActionGrid extends StatelessWidget {
     required this.isDesktop,
     required this.isFavorite,
     required this.canPlay,
+    required this.playLabel,
     required this.onPlay,
     required this.onWatchTogether,
     required this.onFavorite,
@@ -411,6 +469,7 @@ class _MovieActionGrid extends StatelessWidget {
   final bool isDesktop;
   final bool isFavorite;
   final bool canPlay;
+  final String playLabel;
   final VoidCallback onPlay;
   final VoidCallback onWatchTogether;
   final VoidCallback onFavorite;
@@ -422,7 +481,7 @@ class _MovieActionGrid extends StatelessWidget {
     final playButton = FilledButton.icon(
       onPressed: canPlay ? onPlay : null,
       icon: const Icon(Icons.play_arrow_rounded),
-      label: const Text('Xem ngay'),
+      label: Text(playLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
     final watchTogetherButton = OutlinedButton.icon(
       onPressed: canPlay ? onWatchTogether : null,

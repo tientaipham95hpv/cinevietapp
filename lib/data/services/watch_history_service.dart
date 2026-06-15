@@ -52,7 +52,25 @@ class WatchHistoryService {
       final list = WatchHistoryItem.decodeList(
         prefs.getString(_key),
       ).where((e) => e.key != key).toList();
-      await prefs.setString(_key, WatchHistoryItem.encodeList(list));
+      if (list.isEmpty) {
+        await prefs.remove(_key);
+      } else {
+        await prefs.setString(_key, WatchHistoryItem.encodeList(list));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> removeMovie(int movieId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = WatchHistoryItem.decodeList(
+        prefs.getString(_key),
+      ).where((e) => e.movieId != movieId).toList();
+      if (list.isEmpty) {
+        await prefs.remove(_key);
+      } else {
+        await prefs.setString(_key, WatchHistoryItem.encodeList(list));
+      }
     } catch (_) {}
   }
 

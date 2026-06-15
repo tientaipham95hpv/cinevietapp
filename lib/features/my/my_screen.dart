@@ -7,8 +7,11 @@ import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
 import '../../core/widgets/tv_focus.dart';
 import '../../data/models/movie.dart';
+import '../../data/models/watch_history.dart';
 import '../../data/services/auth_service.dart';
+import '../../data/services/cloud_history_service.dart';
 import '../movie_detail/movie_detail_screen.dart';
+import '../player/resume_navigation.dart';
 
 class MyScreen extends ConsumerWidget {
   const MyScreen({super.key});
@@ -168,7 +171,21 @@ class _FavCardState extends ConsumerState<_FavCard> {
     super.dispose();
   }
 
-  void _openDetail() {
+  Future<void> _openDetail() async {
+    final history = await ref.read(syncedWatchHistoryProvider.future);
+    WatchHistoryItem? resume;
+    for (final item in history) {
+      if (item.movieId == movie.id ||
+          (movie.slug.isNotEmpty && item.slug == movie.slug)) {
+        resume = item;
+        break;
+      }
+    }
+    if (!mounted) return;
+    if (resume != null) {
+      await openWatchHistoryItem(context, resume);
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MovieDetailScreen(idOrSlug: movie.slug),

@@ -26,12 +26,14 @@ class CineVietPlayerScreen extends ConsumerStatefulWidget {
     required this.episode,
     this.watchTogetherState,
     this.watchTogetherCode,
+    this.initialResumeItem,
   });
   final Movie movie;
   final EpisodeServer server;
   final EpisodeItem episode;
   final WatchTogetherState? watchTogetherState;
   final String? watchTogetherCode;
+  final WatchHistoryItem? initialResumeItem;
 
   @override
   ConsumerState<CineVietPlayerScreen> createState() =>
@@ -477,7 +479,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _watchRoomState = widget.watchTogetherState;
     _watchMessages.addAll(widget.watchTogetherState?.messages ?? const []);
     _bindWatchTogetherSocket();
-    _loadScreenBrightness();
+    _syncBrightnessWithDevice();
     _loadSystemVolume();
     _selectedSubtitle = widget.episode.subtitles.isNotEmpty
         ? widget.episode.subtitles.first
@@ -640,9 +642,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     });
 
     try {
-      _resumeItem = await ref
-          .read(watchHistoryServiceProvider)
-          .find(widget.movie.slug, widget.server.name, widget.episode.name);
+      _resumeItem = widget.initialResumeItem ??
+          await ref
+              .read(watchHistoryServiceProvider)
+              .find(widget.movie.slug, widget.server.name, widget.episode.name);
       final resume = _resumeItem;
       if (resume != null &&
           !resume.completed &&
@@ -692,6 +695,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
     _controller?.removeListener(_syncPlayerState);
     _controller?.dispose();
+    unawaited(_resetScreenBrightness());
     if (!_switchingEpisode) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
       SystemChrome.setPreferredOrientations([
@@ -890,12 +894,20 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   static const _brightnessChannel = MethodChannel('live.cineviet/brightness');
 
-  Future<void> _loadScreenBrightness() async {
+  Future<void> _syncBrightnessWithDevice() async {
     try {
       final brightness = await _brightnessChannel.invokeMethod<double>('get');
       if (mounted && brightness != null) {
-        setState(() => _screenBrightness = brightness.clamp(0.05, 1.0));
+        setState(() => _screenBrightness = brightness.clamp(0.0, 1.0));
       }
+    } catch (_) {
+      if (mounted) setState(() => _screenBrightness = 1.0);
+    }
+  }
+
+  Future<void> _resetScreenBrightness() async {
+    try {
+      await _brightnessChannel.invokeMethod<double>('reset');
     } catch (_) {}
   }
 
@@ -904,7 +916,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       final actual = await _brightnessChannel.invokeMethod<double>('set', {
         'value': value,
       });
-      return actual?.clamp(0.05, 1.0);
+      return actual?.clamp(0.0, 1.0);
     } catch (_) {
       return null;
     }
@@ -1042,7 +1054,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final change = -dy / size.height * 1.35;
     final isLeft = start.dx < size.width / 2;
     if (isLeft) {
-      final next = (_screenBrightness + change).clamp(0.05, 1.0);
+      final next = (_screenBrightness + change).clamp(0.0, 1.0);
       setState(() {
         _screenBrightness = next;
         _gestureMode = 'brightness';
@@ -1370,14 +1382,6 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             fit: StackFit.expand,
             children: [
               _buildVideo(),
-              if (_screenBrightness < 0.99)
-                IgnorePointer(
-                  child: ColoredBox(
-                    color: Colors.black.withValues(
-                      alpha: (1 - _screenBrightness).clamp(0.0, 0.72),
-                    ),
-                  ),
-                ),
               if (_controlsLocked) _buildLockedButton(),
               _buildGestureHint(),
               if (_buffering && !_loading) _buildBufferingBadge(),
