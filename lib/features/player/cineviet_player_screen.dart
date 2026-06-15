@@ -53,7 +53,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   Duration? _pendingSeekPosition;
   bool _switchingEpisode = false;
   bool _controlsLocked = false;
-  _PlayerFitMode _fitMode = _PlayerFitMode.cover;
+  _PlayerFitMode _fitMode = _PlayerFitMode.contain;
   double _appVolume = 1.0;
   double _screenBrightness = 1.0;
   Timer? _gestureHintTimer;
@@ -381,7 +381,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   Future<void> _setPlaybackSpeed(double speed) async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
-    final nextSpeed = speed.clamp(0.5, 2.0);
+    final nextSpeed = speed.clamp(0.25, 3.0);
     setState(() {
       _playbackSpeed = nextSpeed;
     });
@@ -394,15 +394,30 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   Future<void> _showSpeedSheet() async {
-    final speeds = <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+    final speeds = <double>[
+      0.25,
+      0.5,
+      0.75,
+      1.0,
+      1.25,
+      1.5,
+      1.75,
+      2.0,
+      2.5,
+      3.0,
+    ];
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (context) {
         return SafeArea(
           child: Container(
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.7,
+            ),
             decoration: BoxDecoration(
               color: CineVietColors.card.withValues(alpha: 0.96),
               borderRadius: BorderRadius.circular(22),
@@ -421,17 +436,27 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                for (final speed in speeds)
-                  _SubtitleTile(
-                    label: speed == 1.0
-                        ? 'Bình thường 1x'
-                        : _formatSpeed(speed),
-                    selected: _playbackSpeed == speed,
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      unawaited(_setPlaybackSpeed(speed));
-                    },
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        for (final speed in speeds)
+                          _SubtitleTile(
+                            label: speed == 1.0
+                                ? 'Bình thường 1x'
+                                : _formatSpeed(speed),
+                            selected: _playbackSpeed == speed,
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              unawaited(_setPlaybackSpeed(speed));
+                            },
+                          ),
+                      ],
+                    ),
                   ),
+                ),
               ],
             ),
           ),
@@ -681,6 +706,13 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   bool _handleRemoteKey(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
+    // Khi đang gõ vào ô nhập liệu (vd chat Xem chung trên iPad + Magic
+    // Keyboard), không nuốt phím space/enter/mũi tên cho điều khiển player.
+    final focus = FocusManager.instance.primaryFocus;
+    if (focus?.context?.widget is EditableText ||
+        focus?.context?.findAncestorWidgetOfExactType<EditableText>() != null) {
+      return false;
+    }
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.enter ||
@@ -1938,17 +1970,6 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                         ),
                       ),
                       const SizedBox(width: CineVietSpacing.sm),
-                      if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
-                        FocusTraversalOrder(
-                          order: const NumericFocusOrder(9),
-                          child: _PlayerRoundButton(
-                            icon: Icons.open_in_new_rounded,
-                            label: 'VLC/MX',
-                            onTap: _openExternalPlayer,
-                          ),
-                        ),
-                      if (Platform.isAndroid && _rawStreamUrl.trim().isNotEmpty)
-                        const SizedBox(width: CineVietSpacing.sm),
                       FocusTraversalOrder(
                         order: const NumericFocusOrder(10),
                         child: _PlayerRoundButton(

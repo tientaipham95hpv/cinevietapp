@@ -143,6 +143,13 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
   }
 
   void _openWatchTogether() {
+    final auth = ref.read(authControllerProvider);
+    if (!auth.loggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng đăng nhập để dùng Xem chung')),
+      );
+      return;
+    }
     final server = movie.episodes.isNotEmpty ? movie.episodes.first : null;
     final episode = server?.items.isNotEmpty == true
         ? server!.items.first
@@ -412,42 +419,76 @@ class _MovieActionGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final playButton = FilledButton.icon(
+      onPressed: canPlay ? onPlay : null,
+      icon: const Icon(Icons.play_arrow_rounded),
+      label: const Text('Xem ngay'),
+    );
+    final watchTogetherButton = OutlinedButton.icon(
+      onPressed: canPlay ? onWatchTogether : null,
+      icon: const Icon(Icons.groups_rounded),
+      label: const Text('Xem chung'),
+    );
+    final favoriteButton = OutlinedButton.icon(
+      onPressed: onFavorite,
+      icon: Icon(
+        isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+        color: isFavorite ? Colors.redAccent : null,
+      ),
+      label: Text(isFavorite ? 'Đã yêu thích' : 'Yêu thích'),
+    );
+    final playlistButton = OutlinedButton.icon(
+      onPressed: onPlaylist,
+      icon: const Icon(Icons.playlist_add_rounded),
+      label: const Text('Thêm playlist'),
+    );
+    final shareButton = OutlinedButton.icon(
+      onPressed: onShare,
+      icon: const Icon(Icons.ios_share_rounded),
+      label: const Text('Chia sẻ'),
+    );
+
+    // Mobile: "Xem ngay" chiếm trọn 1 dòng; "Xem chung" + "Yêu thích" 1 dòng;
+    // "Thêm playlist" + "Chia sẻ" 1 dòng.
+    if (isMobile) {
+      const double rowHeight = 56;
+      Widget half(Widget child) =>
+          Expanded(child: SizedBox(height: rowHeight, child: child));
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(height: rowHeight, child: playButton),
+          const SizedBox(height: CineVietSpacing.sm),
+          Row(
+            children: [
+              half(watchTogetherButton),
+              const SizedBox(width: CineVietSpacing.sm),
+              half(favoriteButton),
+            ],
+          ),
+          const SizedBox(height: CineVietSpacing.sm),
+          Row(
+            children: [
+              half(playlistButton),
+              const SizedBox(width: CineVietSpacing.sm),
+              half(shareButton),
+            ],
+          ),
+        ],
+      );
+    }
+
     final actions = <Widget>[
-      FilledButton.icon(
-        onPressed: canPlay ? onPlay : null,
-        icon: const Icon(Icons.play_arrow_rounded),
-        label: const Text('Xem ngay'),
-      ),
-      OutlinedButton.icon(
-        onPressed: canPlay ? onWatchTogether : null,
-        icon: const Icon(Icons.groups_rounded),
-        label: const Text('Xem chung'),
-      ),
-      OutlinedButton.icon(
-        onPressed: onFavorite,
-        icon: Icon(
-          isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          color: isFavorite ? Colors.redAccent : null,
-        ),
-        label: Text(isFavorite ? 'Đã yêu thích' : 'Yêu thích'),
-      ),
-      OutlinedButton.icon(
-        onPressed: onPlaylist,
-        icon: const Icon(Icons.playlist_add_rounded),
-        label: const Text('Thêm playlist'),
-      ),
-      OutlinedButton.icon(
-        onPressed: onShare,
-        icon: const Icon(Icons.ios_share_rounded),
-        label: const Text('Chia sẻ'),
-      ),
+      playButton,
+      watchTogetherButton,
+      favoriteButton,
+      playlistButton,
+      shareButton,
     ];
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = isMobile
-            ? 2
-            : isTablet
+        final crossAxisCount = isTablet
             ? 3
             : isDesktop
             ? 3
@@ -462,7 +503,7 @@ class _MovieActionGrid extends StatelessWidget {
               .map(
                 (child) => SizedBox(
                   width: itemWidth,
-                  height: isMobile ? 56 : 54,
+                  height: 54,
                   child: child,
                 ),
               )
