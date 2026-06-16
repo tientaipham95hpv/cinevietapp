@@ -650,63 +650,69 @@ class _EpisodeButton extends StatefulWidget {
 }
 
 class _EpisodeButtonState extends State<_EpisodeButton> {
-  bool focused = false;
-
   @override
   Widget build(BuildContext context) {
-    final active = widget.selected || focused;
-    return Focus(
-      onFocusChange: (value) => setState(() => focused = value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(CineVietRadius.full),
-          boxShadow: focused
-              ? [
-                  BoxShadow(
-                    color: CineVietColors.accent.withValues(alpha: 0.26),
-                    blurRadius: 18,
-                  ),
-                ]
-              : null,
-        ),
-        child: OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            backgroundColor: widget.selected
+    // Single focusable node: TvFocus owns D-pad focus + select activation.
+    // Previously a Focus wrapper + an inner focusable OutlinedButton created
+    // two competing focus nodes, which made episode selection hard on TV.
+    // The visual is now a plain non-focusable container.
+    return TvFocus(
+      borderRadius: BorderRadius.circular(CineVietRadius.full),
+      scale: 1.06,
+      onTap: widget.onPressed,
+      builder: (context, tvFocused, child) {
+        final active = widget.selected || tvFocused;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(
+            horizontal: CineVietSpacing.md,
+            vertical: CineVietSpacing.md,
+          ),
+          decoration: BoxDecoration(
+            color: widget.selected
                 ? CineVietColors.accentSoft
                 : active
                 ? CineVietColors.cardHover
                 : CineVietColors.card,
-            side: BorderSide(
+            borderRadius: BorderRadius.circular(CineVietRadius.full),
+            border: Border.all(
               color: active
                   ? CineVietColors.accent
                   : CineVietColors.borderLight,
               width: active ? 2 : 1,
             ),
-            foregroundColor: active
-                ? CineVietColors.accent
-                : CineVietColors.text,
-            padding: const EdgeInsets.symmetric(
-              horizontal: CineVietSpacing.md,
-              vertical: CineVietSpacing.md,
-            ),
+            boxShadow: active
+                ? [
+                    BoxShadow(
+                      color: CineVietColors.accent.withValues(alpha: 0.26),
+                      blurRadius: 18,
+                    ),
+                  ]
+                : null,
           ),
-          onPressed: widget.onPressed,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (widget.selected) ...[
-                const Icon(Icons.check_circle_rounded, size: 17),
+                Icon(
+                  Icons.check_circle_rounded,
+                  size: 17,
+                  color: CineVietColors.accent,
+                ),
                 const SizedBox(width: CineVietSpacing.xs),
               ],
               Text(
                 widget.item.displayName,
-                style: const TextStyle(fontWeight: FontWeight.w800),
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: active ? CineVietColors.accent : CineVietColors.text,
+                ),
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
+      child: const SizedBox.shrink(),
     );
   }
 }

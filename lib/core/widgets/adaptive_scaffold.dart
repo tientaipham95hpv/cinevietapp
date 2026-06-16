@@ -178,6 +178,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                         _glassButton(
                           icon: Icons.search_rounded,
                           onTap: _openSearch,
+                          tvFocusable: true,
                         ),
                         const SizedBox(width: CineVietSpacing.sm),
                       ],
@@ -187,6 +188,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                             : Icons.keyboard_double_arrow_right_rounded,
                         onTap: () =>
                             setState(() => _tvRailExpanded = !_tvRailExpanded),
+                        tvFocusable: true,
                       ),
                     ],
                   ),
@@ -262,20 +264,31 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     );
   }
 
-  Widget _glassButton({required IconData icon, required VoidCallback onTap}) {
-    return Material(
-      color: CineVietColors.card.withValues(alpha: 0.78),
+  Widget _glassButton({
+    required IconData icon,
+    required VoidCallback onTap,
+    bool tvFocusable = false,
+  }) {
+    // On TV the glass buttons (search / expand rail) must be reachable by the
+    // D-pad; a bare InkWell is not focusable, so wrap with TvFocus there.
+    return TvFocus(
+      enabled: tvFocusable,
+      onTap: onTap,
       borderRadius: BorderRadius.circular(CineVietRadius.full),
-      child: InkWell(
+      child: Material(
+        color: CineVietColors.card.withValues(alpha: 0.78),
         borderRadius: BorderRadius.circular(CineVietRadius.full),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(CineVietSpacing.sm),
-          decoration: BoxDecoration(
-            border: Border.all(color: CineVietColors.borderLight),
-            borderRadius: BorderRadius.circular(CineVietRadius.full),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(CineVietRadius.full),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(CineVietSpacing.sm),
+            decoration: BoxDecoration(
+              border: Border.all(color: CineVietColors.borderLight),
+              borderRadius: BorderRadius.circular(CineVietRadius.full),
+            ),
+            child: Icon(icon, color: CineVietColors.accent),
           ),
-          child: Icon(icon, color: CineVietColors.accent),
         ),
       ),
     );
@@ -305,9 +318,16 @@ class _NavTileState extends State<_NavTile> {
 
   @override
   Widget build(BuildContext context) {
+    // On TV, TvFocus below owns the D-pad focus node. Keep this outer Focus
+    // non-focusable there so the two don't compete and trap navigation when
+    // moving into the sidebar. On desktop TvFocus is disabled, so this Focus
+    // handles keyboard activation instead.
     return Focus(
+      canRequestFocus: !widget.tvMode,
+      skipTraversal: widget.tvMode,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
+        if (!widget.tvMode &&
+            event is KeyDownEvent &&
             (event.logicalKey == LogicalKeyboardKey.select ||
                 event.logicalKey == LogicalKeyboardKey.enter ||
                 event.logicalKey == LogicalKeyboardKey.space)) {

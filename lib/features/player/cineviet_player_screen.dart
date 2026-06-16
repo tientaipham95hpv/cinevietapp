@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
@@ -66,6 +67,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   double? _pendingBrightness;
   double? _pendingVolume;
   WatchHistoryItem? _resumeItem;
+  int? _resumeTargetMs;
   bool _watchChatVisible = true;
   final List<WatchTogetherMessage> _watchMessages = [];
   final TextEditingController _watchChatController = TextEditingController();
@@ -80,6 +82,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   bool _subtitleLoading = false;
   String? _subtitleError;
   double _playbackSpeed = 1.0;
+  bool _autoNextEpisode = true;
+  bool _autoNextTriggered = false;
+  static const String _autoNextPrefKey = 'player_auto_next_episode';
   List<String> _activeCandidateUrls = const [];
   int _activeCandidateIndex = 0;
   double? _scrubProgress;
@@ -395,8 +400,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _revealControls();
   }
 
-  Future<void> _showSpeedSheet() async {
-    final speeds = <double>[
+  Future<void> _showSettingsSheet() async {
+    const speeds = <double>[
       0.25,
       0.5,
       0.75,
@@ -413,55 +418,107 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (context) {
-        return SafeArea(
-          child: Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.7,
-            ),
-            decoration: BoxDecoration(
-              color: CineVietColors.card.withValues(alpha: 0.96),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: CineVietColors.borderLight),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Tốc độ phát',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
+        // StatefulBuilder so the auto-next toggle / selected speed update
+        // instantly inside the sheet without closing it.
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Container(
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(16),
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
                 ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                decoration: BoxDecoration(
+                  color: CineVietColors.card.withValues(alpha: 0.96),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: CineVietColors.borderLight),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
                       children: [
-                        for (final speed in speeds)
-                          _SubtitleTile(
-                            label: speed == 1.0
-                                ? 'Bình thường 1x'
-                                : _formatSpeed(speed),
-                            selected: _playbackSpeed == speed,
-                            onTap: () {
-                              Navigator.of(context).pop();
-                              unawaited(_setPlaybackSpeed(speed));
-                            },
+                        Icon(
+                          Icons.settings_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Cài đặt',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
                           ),
+                        ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      value: _autoNextEpisode,
+                      activeThumbColor: CineVietColors.accent,
+                      contentPadding: EdgeInsets.zero,
+                      secondary: const Icon(
+                        Icons.playlist_play_rounded,
+                        color: Colors.white70,
+                      ),
+                      title: const Text(
+                        'Tự chuyển tập',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Tự phát tập tiếp theo khi hết tập',
+                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                      ),
+                      onChanged: (value) {
+                        setSheetState(() {});
+                        unawaited(_setAutoNextEpisode(value));
+                      },
+                    ),
+                    const Divider(color: CineVietColors.borderLight),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 6),
+                      child: Text(
+                        'Tốc độ phát',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            for (final speed in speeds)
+                              _SubtitleTile(
+                                label: speed == 1.0
+                                    ? 'Bình thường 1x'
+                                    : _formatSpeed(speed),
+                                selected: _playbackSpeed == speed,
+                                onTap: () {
+                                  setSheetState(() {});
+                                  unawaited(_setPlaybackSpeed(speed));
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -485,7 +542,30 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         ? widget.episode.subtitles.first
         : null;
     unawaited(_loadSelectedSubtitle());
+    unawaited(_loadAutoNextPref());
     _initPlayer();
+  }
+
+  Future<void> _loadAutoNextPref() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final value = prefs.getBool(_autoNextPrefKey);
+      if (value != null && mounted) {
+        setState(() => _autoNextEpisode = value);
+      }
+    } catch (_) {
+      // Preference read must never block playback.
+    }
+  }
+
+  Future<void> _setAutoNextEpisode(bool value) async {
+    if (mounted) setState(() => _autoNextEpisode = value);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_autoNextPrefKey, value);
+    } catch (_) {
+      // Preference write must never block playback.
+    }
   }
 
   void _bindWatchTogetherSocket() {
@@ -651,11 +731,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
           !resume.completed &&
           resume.positionMs > 10000 &&
           resume.durationMs > 0) {
-        final safeMax = (resume.durationMs - 5000).clamp(0, resume.durationMs);
-        final target = Duration(
-          milliseconds: resume.positionMs.clamp(0, safeMax).toInt(),
-        );
-        await controller.seekTo(target);
+        _resumeTargetMs = resume.positionMs;
+        await _applyResumeSeek(controller);
       }
     } catch (_) {
       // Resume/history must never block playback.
@@ -838,6 +915,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
               : const Duration(seconds: 30),
         );
         await nextController.setVolume(_appVolume);
+        await _applyResumeSeek(nextController);
         if (mounted) {
           setState(() {
             _loading = false;
@@ -890,6 +968,30 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         if (friendlyError != null) _error = friendlyError;
       });
     }
+    _maybeAutoNextEpisode(value);
+  }
+
+  // Auto-advance to the next episode when the current one is (almost) finished.
+  // Guarded by [_autoNextEpisode] preference and [_autoNextTriggered] so it
+  // fires at most once per episode and never while switching/seeking.
+  void _maybeAutoNextEpisode(VideoPlayerValue value) {
+    if (!_autoNextEpisode || _autoNextTriggered || _switchingEpisode) return;
+    if (!value.isInitialized || value.hasError) return;
+    final duration = value.duration;
+    final position = value.position;
+    if (duration.inMilliseconds <= 0) return;
+    // Only consider real end-of-stream, not an unseeked fresh controller.
+    final remaining = duration - position;
+    final ended = value.isCompleted ||
+        (position > Duration.zero &&
+            remaining <= const Duration(milliseconds: 800) &&
+            position >= duration * 0.95);
+    if (!ended) return;
+    // Make sure there is a next episode before flipping the guard.
+    final current = _currentEpisodeIndex;
+    if (current < 0 || current + 1 >= widget.server.items.length) return;
+    _autoNextTriggered = true;
+    _playNextEpisode();
   }
 
   static const _brightnessChannel = MethodChannel('live.cineviet/brightness');
@@ -1112,6 +1214,36 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       _saveProgress();
       _emitWatchSync();
     });
+  }
+
+  // Re-applies the saved resume position to [controller]. Used both on first
+  // load and after a candidate-source switch (e.g. kkphim proxy -> direct),
+  // which previously restarted playback from the beginning because the new
+  // controller was never seeked back to the resume point.
+  Future<void> _applyResumeSeek(VideoPlayerController controller) async {
+    final targetMs = _resumeTargetMs;
+    if (targetMs == null || targetMs <= 0) return;
+    try {
+      // Some HLS sources (kkphim/phimapi) report duration a beat after
+      // initialize(); wait briefly so seekTo lands instead of being ignored.
+      var duration = controller.value.duration;
+      for (var attempt = 0;
+          attempt < 10 && duration.inMilliseconds <= 0;
+          attempt++) {
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        if (!mounted || _controller != controller) return;
+        duration = controller.value.duration;
+      }
+      var seekMs = targetMs;
+      final durMs = duration.inMilliseconds;
+      if (durMs > 0) {
+        final safeMax = (durMs - 5000).clamp(0, durMs);
+        seekMs = targetMs.clamp(0, safeMax);
+      }
+      await controller.seekTo(Duration(milliseconds: seekMs));
+    } catch (_) {
+      // Seeking must never break playback.
+    }
   }
 
   Future<void> _saveProgress() async {
@@ -1968,9 +2100,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                       FocusTraversalOrder(
                         order: const NumericFocusOrder(8),
                         child: _PlayerRoundButton(
-                          icon: Icons.speed_rounded,
-                          label: _formatSpeed(_playbackSpeed),
-                          onTap: _showSpeedSheet,
+                          icon: Icons.settings_rounded,
+                          label: 'Cài đặt',
+                          onTap: _showSettingsSheet,
                         ),
                       ),
                       const SizedBox(width: CineVietSpacing.sm),
