@@ -207,7 +207,43 @@ class _WatchTogetherScreenState extends ConsumerState<WatchTogetherScreen> {
         ? CineVietSpacing.xl
         : CineVietSpacing.lg;
     final maxContentWidth = platform.isDesktop ? 920.0 : double.infinity;
-    ref.watch(authControllerProvider);
+    final loggedIn = ref.watch(authControllerProvider).loggedIn;
+    if (!loggedIn) {
+      return Scaffold(
+        backgroundColor: CineVietColors.bg,
+        body: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(CineVietSpacing.xl),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.groups_rounded,
+                    size: 56,
+                    color: CineVietColors.textSoft,
+                  ),
+                  const SizedBox(height: CineVietSpacing.md),
+                  const Text(
+                    'Đăng nhập ở tab Cá nhân để dùng Xem chung.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: CineVietColors.textSoft),
+                  ),
+                  if (movie != null) ...[
+                    const SizedBox(height: CineVietSpacing.lg),
+                    OutlinedButton.icon(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      label: const Text('Quay lại'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: CineVietColors.bg,
       body: SafeArea(

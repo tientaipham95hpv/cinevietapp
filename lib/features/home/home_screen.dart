@@ -950,6 +950,7 @@ class _ContinueWatchingSection extends StatelessWidget {
               separatorBuilder: (context, index) =>
                   const SizedBox(width: CineVietSpacing.md),
               itemBuilder: (context, index) => _ContinueCard(
+                key: ValueKey(displayItems[index].key),
                 item: displayItems[index],
                 width: platform.isMobile ? 260 : 330,
               ),
@@ -962,7 +963,7 @@ class _ContinueWatchingSection extends StatelessWidget {
 }
 
 class _ContinueCard extends ConsumerStatefulWidget {
-  const _ContinueCard({required this.item, required this.width});
+  const _ContinueCard({super.key, required this.item, required this.width});
   final WatchHistoryItem item;
   final double width;
 

@@ -130,9 +130,34 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     return 3;
   }
 
+  // Classify a server by its audio/subtitle variant so cross-source fallback
+  // never silently switches between Vietsub / Thuyết Minh / Lồng Tiếng. The
+  // canonical names from ophim/kkphim are full words ("Vietsub", "Thuyết
+  // Minh", "Lồng Tiếng"), optionally tagged with the source in brackets.
+  String _serverAudioType(String serverName) {
+    final n = serverName.toLowerCase();
+    if (n.contains('thuyết minh') ||
+        n.contains('thuyet minh') ||
+        n.contains('thuyetminh')) {
+      return 'tm';
+    }
+    if (n.contains('lồng tiếng') ||
+        n.contains('long tieng') ||
+        n.contains('longtieng')) {
+      return 'lt';
+    }
+    if (n.contains('vietsub') ||
+        n.contains('viet sub') ||
+        n.contains('vsub')) {
+      return 'vs';
+    }
+    return 'unknown';
+  }
+
   List<MapEntry<EpisodeServer, EpisodeItem>>
   get _candidateEpisodesForAndroidTv {
     final currentKey = _episodeKey(widget.episode);
+    final selectedAudio = _serverAudioType(widget.server.name);
     final out = <MapEntry<EpisodeServer, EpisodeItem>>[];
     for (final server in widget.movie.episodes) {
       for (final episode in server.items) {
@@ -142,12 +167,23 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
             _episodeKey(episode) == currentKey ||
             episode.displayName == widget.episode.displayName;
         if (!sameEpisode) continue;
+        // Never fall back across audio variants: a Thuyết Minh pick must not
+        // resolve to a Vietsub stream (and vice-versa). Only the exact chosen
+        // server is exempt so the user's selection is always playable.
+        final isExactChoice =
+            server.name == widget.server.name &&
+            _streamUrlOf(episode) == _rawStreamUrl;
+        if (!isExactChoice && _serverAudioType(server.name) != selectedAudio) {
+          continue;
+        }
         out.add(MapEntry(server, episode));
       }
     }
     if (out.isEmpty) return [MapEntry(widget.server, widget.episode)];
 
     out.sort((a, b) {
+      // The user's chosen server+episode always wins. Source priority only
+      // decides ordering among the remaining same-audio fallbacks.
       final aCurrent =
           identical(a.value, widget.episode) ||
           (_streamUrlOf(a.value) == _rawStreamUrl &&
@@ -156,11 +192,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
           identical(b.value, widget.episode) ||
           (_streamUrlOf(b.value) == _rawStreamUrl &&
               b.key.name == widget.server.name);
+      if (aCurrent != bCurrent) return aCurrent ? -1 : 1;
       final byServer = _androidTvServerPriority(
         a.key,
       ).compareTo(_androidTvServerPriority(b.key));
       if (byServer != 0) return byServer;
-      if (aCurrent != bCurrent) return aCurrent ? -1 : 1;
       return a.key.name.compareTo(b.key.name);
     });
     return out;
