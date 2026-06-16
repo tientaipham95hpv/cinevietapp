@@ -11,16 +11,16 @@ workflows:
           flutter clean
           flutter pub get
       - name: Build mobile/tablet APKs by ABI
-        script: flutter build apk --release --flavor mobile --split-per-abi --dart-define=APP_VARIANT=mobile --build-name=1.0.6 --build-number=9071
+        script: flutter build apk --release --flavor mobile --split-per-abi --dart-define=APP_VARIANT=mobile --build-name=1.0.6 --build-number=9072
       - name: Build Android TV/TV box universal APK
-        script: flutter build apk --release --flavor tv --dart-define=APP_VARIANT=tv --dart-define=APP_IS_TV=true --build-name=1.0.6 --build-number=9071
+        script: flutter build apk --release --flavor tv --dart-define=APP_VARIANT=tv --dart-define=APP_IS_TV=true --build-name=1.0.6 --build-number=9072
       - name: Collect APK artifacts
         script: |
           mkdir -p build/app/outputs/cineviet-release
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-arm64-v8a-1.0.6+9071.apk
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-armeabi-v7a-1.0.6+9071.apk
-          cp build/app/outputs/flutter-apk/app-x86_64-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-x86_64-1.0.6+9071.apk
-          cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-universal-1.0.6+9071.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-arm64-v8a-1.0.6+9072.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-armeabi-v7a-1.0.6+9072.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-x86_64-1.0.6+9072.apk
+          cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-universal-1.0.6+9072.apk
     artifacts:
       - build/app/outputs/cineviet-release/*.apk
       - build/app/outputs/flutter-apk/*-release.apk
@@ -49,7 +49,7 @@ workflows:
           cd ..
       - name: Build unsigned iOS app
         script: |
-          flutter build ios --release --no-codesign --dart-define=APP_VARIANT=ios --build-name=1.0.6 --build-number=9071
+          flutter build ios --release --no-codesign --dart-define=APP_VARIANT=ios --build-name=1.0.6 --build-number=9072
       - name: Package unsigned IPA for ESign
         script: |
           rm -rf build/ios/unsigned_ipa
@@ -85,7 +85,7 @@ workflows:
           flutter clean
           flutter pub get
       - name: Build Windows release
-        script: flutter build windows --release --dart-define=APP_VARIANT=windows --build-name=1.0.6 --build-number=9071
+        script: flutter build windows --release --dart-define=APP_VARIANT=windows --build-name=1.0.6 --build-number=9072
       - name: Package Windows portable zip
         script: |
           powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item scripts\register_windows_protocol.ps1 build\windows\x64\runner\Release\Register-CineViet-Google-Login.ps1 -Force; New-Item -ItemType Directory -Force build\windows\package | Out-Null; Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath build\windows\package\$env:WINDOWS_ZIP_NAME -Force"

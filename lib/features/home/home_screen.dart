@@ -985,10 +985,11 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
       );
     } catch (_) {
       if (!mounted) return;
-      setState(() => _removing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Không thể xóa khỏi Xem tiếp.')),
       );
+    } finally {
+      if (mounted) setState(() => _removing = false);
     }
   }
 
