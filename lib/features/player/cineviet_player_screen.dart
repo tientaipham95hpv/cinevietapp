@@ -146,9 +146,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         n.contains('longtieng')) {
       return 'lt';
     }
-    if (n.contains('vietsub') ||
-        n.contains('viet sub') ||
-        n.contains('vsub')) {
+    if (n.contains('vietsub') || n.contains('viet sub') || n.contains('vsub')) {
       return 'vs';
     }
     return 'unknown';
@@ -215,6 +213,33 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       return 'https://cineviet.live/api/stream?maxHeight=$height&maxBandwidth=$bandwidth&url=$encoded';
     }
     return 'https://cineviet.live/api/stream?url=$encoded';
+  }
+
+  Map<String, String> _headersForStreamUrl(String streamUrl) {
+    final uri = Uri.tryParse(streamUrl);
+    final host = uri?.host.toLowerCase() ?? '';
+    if (host.isEmpty || host == 'cineviet.live') {
+      return const <String, String>{};
+    }
+    if (host.contains('opstream')) {
+      return const <String, String>{
+        'Referer': 'https://ophim1.com/',
+        'Origin': 'https://ophim1.com',
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      };
+    }
+    if (host.contains('phim1280') ||
+        host.contains('kkphimplayer') ||
+        host.contains('phimapi')) {
+      return const <String, String>{
+        'Referer': 'https://phimapi.com/',
+        'Origin': 'https://phimapi.com',
+        'User-Agent':
+            'Mozilla/5.0 (Linux; Android 12; Android TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      };
+    }
+    return const <String, String>{};
   }
 
   List<String> get _candidateStreamUrls {
@@ -707,7 +732,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         final nextController = VideoPlayerController.network(
           streamUrl,
           formatHint: VideoFormat.hls,
-          httpHeaders: const <String, String>{},
+          httpHeaders: _headersForStreamUrl(streamUrl),
         );
         _controller = nextController;
         nextController.addListener(_syncPlayerState);
@@ -758,7 +783,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     });
 
     try {
-      _resumeItem = widget.initialResumeItem ??
+      _resumeItem =
+          widget.initialResumeItem ??
           await ref
               .read(watchHistoryServiceProvider)
               .find(widget.movie.slug, widget.server.name, widget.episode.name);
@@ -940,7 +966,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         final nextController = VideoPlayerController.network(
           streamUrl,
           formatHint: VideoFormat.hls,
-          httpHeaders: const <String, String>{},
+          httpHeaders: _headersForStreamUrl(streamUrl),
         );
         _controller = nextController;
         _activeCandidateIndex = i;
@@ -1018,7 +1044,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     if (duration.inMilliseconds <= 0) return;
     // Only consider real end-of-stream, not an unseeked fresh controller.
     final remaining = duration - position;
-    final ended = value.isCompleted ||
+    final ended =
+        value.isCompleted ||
         (position > Duration.zero &&
             remaining <= const Duration(milliseconds: 800) &&
             position >= duration * 0.95);
@@ -1263,9 +1290,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       // Some HLS sources (kkphim/phimapi) report duration a beat after
       // initialize(); wait briefly so seekTo lands instead of being ignored.
       var duration = controller.value.duration;
-      for (var attempt = 0;
-          attempt < 10 && duration.inMilliseconds <= 0;
-          attempt++) {
+      for (
+        var attempt = 0;
+        attempt < 10 && duration.inMilliseconds <= 0;
+        attempt++
+      ) {
         await Future<void>.delayed(const Duration(milliseconds: 120));
         if (!mounted || _controller != controller) return;
         duration = controller.value.duration;
@@ -2528,7 +2557,7 @@ class _WatchChatToggleButton extends StatelessWidget {
   }
 }
 
-class _ServerEpisodeSheet extends StatelessWidget {
+class _ServerEpisodeSheet extends StatefulWidget {
   const _ServerEpisodeSheet({
     required this.movie,
     required this.currentServer,
@@ -2543,17 +2572,44 @@ class _ServerEpisodeSheet extends StatelessWidget {
   final void Function(EpisodeServer server, EpisodeItem episode) onSelect;
   final void Function(MoviePart part) onSelectPart;
 
+  @override
+  State<_ServerEpisodeSheet> createState() => _ServerEpisodeSheetState();
+}
+
+class _ServerEpisodeSheetState extends State<_ServerEpisodeSheet> {
+  late int _selectedServerIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedServerIndex = widget.movie.episodes.indexWhere(
+      (server) => server.name == widget.currentServer.name,
+    );
+    if (_selectedServerIndex < 0) _selectedServerIndex = 0;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ServerEpisodeSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_selectedServerIndex >= widget.movie.episodes.length) {
+      _selectedServerIndex = 0;
+    }
+  }
+
   bool _isCurrent(EpisodeServer server, EpisodeItem episode) {
-    return server.name == currentServer.name &&
-        episode.name == currentEpisode.name &&
-        episode.linkM3u8 == currentEpisode.linkM3u8 &&
-        episode.linkEmbed == currentEpisode.linkEmbed;
+    return server.name == widget.currentServer.name &&
+        episode.name == widget.currentEpisode.name &&
+        episode.linkM3u8 == widget.currentEpisode.linkM3u8 &&
+        episode.linkEmbed == widget.currentEpisode.linkEmbed;
   }
 
   @override
   Widget build(BuildContext context) {
-    final servers = movie.episodes;
-    final parts = movie.parts;
+    final servers = widget.movie.episodes;
+    final parts = widget.movie.parts;
+    final selectedServer = servers.isNotEmpty
+        ? servers[_selectedServerIndex]
+        : null;
     return SafeArea(
       top: false,
       child: Container(
@@ -2606,8 +2662,8 @@ class _ServerEpisodeSheet extends StatelessWidget {
                     for (final part in parts) ...[
                       _EpisodeChip(
                         label: 'Phần ${part.partNumber}',
-                        selected: part.id == movie.id,
-                        onTap: () => onSelectPart(part),
+                        selected: part.id == widget.movie.id,
+                        onTap: () => widget.onSelectPart(part),
                       ),
                       const SizedBox(width: 8),
                     ],
@@ -2618,43 +2674,130 @@ class _ServerEpisodeSheet extends StatelessWidget {
             ] else
               const SizedBox(height: 8),
             Expanded(
-              child: ListView.separated(
-                itemCount: servers.length,
-                separatorBuilder: (_, index) => const SizedBox(height: 16),
-                itemBuilder: (context, serverIndex) {
-                  final server = servers[serverIndex];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        server.displayName,
-                        style: const TextStyle(
-                          color: CineVietColors.accent,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final episode in server.items)
-                            _EpisodeChip(
-                              label: episode.displayName,
-                              selected: _isCurrent(server, episode),
-                              onTap: () => onSelect(server, episode),
-                            ),
+              child: ListView(
+                children: [
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        for (
+                          var serverIndex = 0;
+                          serverIndex < servers.length;
+                          serverIndex++
+                        ) ...[
+                          _ServerChip(
+                            label: servers[serverIndex].displayName,
+                            selected: serverIndex == _selectedServerIndex,
+                            onTap: () {
+                              setState(() {
+                                _selectedServerIndex = serverIndex;
+                              });
+                            },
+                          ),
+                          if (serverIndex < servers.length - 1)
+                            const SizedBox(width: 8),
                         ],
+                      ],
+                    ),
+                  ),
+                  if (selectedServer != null) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final episode in selectedServer.items)
+                          _EpisodeChip(
+                            label: episode.displayName,
+                            selected: _isCurrent(selectedServer, episode),
+                            onTap: () =>
+                                widget.onSelect(selectedServer, episode),
+                          ),
+                      ],
+                    ),
+                  ] else
+                    Text(
+                      'Chưa có dữ liệu tập.',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontWeight: FontWeight.w700,
                       ),
-                    ],
-                  );
-                },
+                    ),
+                ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ServerChip extends StatelessWidget {
+  const _ServerChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocus(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(CineVietRadius.full),
+      scale: 1.04,
+      builder: (context, tvFocused, child) {
+        final active = selected || tvFocused;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: selected
+                ? CineVietColors.accent
+                : Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(CineVietRadius.full),
+            border: Border.all(
+              color: active
+                  ? CineVietColors.accent
+                  : Colors.white.withValues(alpha: 0.14),
+              width: active ? 2 : 1,
+            ),
+            boxShadow: tvFocused
+                ? [
+                    BoxShadow(
+                      color: CineVietColors.accent.withValues(alpha: 0.24),
+                      blurRadius: 18,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.dns_rounded,
+                size: 16,
+                color: selected ? const Color(0xFF061A13) : Colors.white,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: selected ? const Color(0xFF061A13) : Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      child: const SizedBox.shrink(),
     );
   }
 }

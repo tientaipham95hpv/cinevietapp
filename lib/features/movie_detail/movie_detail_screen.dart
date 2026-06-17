@@ -72,8 +72,6 @@ class MovieDetailScreen extends ConsumerWidget {
   }
 }
 
-
-
 String _resumeMatchText(String value) => value
     .toLowerCase()
     .replaceAll(RegExp(r'[^a-z0-9\u00c0-\u1ef9]+', unicode: true), ' ')
@@ -163,15 +161,23 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
       if (item.movieId > 0 && movie.id > 0 && item.movieId == movie.id) {
         return item;
       }
-      if (movieSlug.isNotEmpty && itemSlug.isNotEmpty && itemSlug == movieSlug) {
+      if (movieSlug.isNotEmpty &&
+          itemSlug.isNotEmpty &&
+          itemSlug == movieSlug) {
         return item;
       }
-      if (movieTitle.isNotEmpty && itemTitle.isNotEmpty &&
-          (itemTitle == movieTitle || itemTitle.contains(movieTitle) || movieTitle.contains(itemTitle))) {
+      if (movieTitle.isNotEmpty &&
+          itemTitle.isNotEmpty &&
+          (itemTitle == movieTitle ||
+              itemTitle.contains(movieTitle) ||
+              movieTitle.contains(itemTitle))) {
         return item;
       }
-      if (movieTitleEn.isNotEmpty && itemTitle.isNotEmpty &&
-          (itemTitle == movieTitleEn || itemTitle.contains(movieTitleEn) || movieTitleEn.contains(itemTitle))) {
+      if (movieTitleEn.isNotEmpty &&
+          itemTitle.isNotEmpty &&
+          (itemTitle == movieTitleEn ||
+              itemTitle.contains(movieTitleEn) ||
+              movieTitleEn.contains(itemTitle))) {
         return item;
       }
     }
@@ -180,9 +186,7 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
 
   Future<void> _openResume(WatchHistoryItem item) async {
     await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ResumePlayerLoaderScreen(item: item),
-      ),
+      MaterialPageRoute(builder: (_) => ResumePlayerLoaderScreen(item: item)),
     );
   }
 
@@ -511,8 +515,9 @@ class _MovieActionGrid extends StatelessWidget {
     // "Thêm playlist" + "Chia sẻ" 1 dòng.
     if (isMobile) {
       const double rowHeight = 56;
-      Widget half(Widget child) =>
-          Expanded(child: SizedBox(height: rowHeight, child: child));
+      Widget half(Widget child) => Expanded(
+        child: SizedBox(height: rowHeight, child: child),
+      );
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -560,11 +565,7 @@ class _MovieActionGrid extends StatelessWidget {
           runSpacing: CineVietSpacing.sm,
           children: actions
               .map(
-                (child) => SizedBox(
-                  width: itemWidth,
-                  height: 54,
-                  child: child,
-                ),
+                (child) => SizedBox(width: itemWidth, height: 54, child: child),
               )
               .toList(),
         );
@@ -573,64 +574,152 @@ class _MovieActionGrid extends StatelessWidget {
   }
 }
 
-class _EpisodeList extends StatelessWidget {
+class _EpisodeList extends StatefulWidget {
   const _EpisodeList({required this.movie, required this.onSelected});
   final Movie movie;
   final void Function(int serverIndex, int episodeIndex) onSelected;
 
   @override
+  State<_EpisodeList> createState() => _EpisodeListState();
+}
+
+class _EpisodeListState extends State<_EpisodeList> {
+  int _selectedServerIndex = 0;
+
+  @override
+  void didUpdateWidget(covariant _EpisodeList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_selectedServerIndex >= widget.movie.episodes.length) {
+      _selectedServerIndex = 0;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (movie.episodes.isEmpty) {
+    if (widget.movie.episodes.isEmpty) {
       return const Text(
         'Chưa có dữ liệu tập.',
         style: TextStyle(color: CineVietColors.textSoft),
       );
     }
+    final selectedServer = widget.movie.episodes[_selectedServerIndex];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (
-          var serverIndex = 0;
-          serverIndex < movie.episodes.length;
-          serverIndex++
-        ) ...[
-          Row(
-            children: [
-              const Icon(
-                Icons.dns_rounded,
-                color: CineVietColors.accent,
-                size: 18,
-              ),
-              const SizedBox(width: CineVietSpacing.sm),
-              Text(
-                movie.episodes[serverIndex].displayName,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: CineVietSpacing.sm),
-          Wrap(
-            spacing: CineVietSpacing.sm,
-            runSpacing: CineVietSpacing.sm,
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(bottom: CineVietSpacing.sm),
+          child: Row(
             children: [
               for (
-                var episodeIndex = 0;
-                episodeIndex < movie.episodes[serverIndex].items.length;
-                episodeIndex++
-              )
-                _EpisodeButton(
-                  item: movie.episodes[serverIndex].items[episodeIndex],
-                  selected: false,
-                  onPressed: () => onSelected(serverIndex, episodeIndex),
+                var serverIndex = 0;
+                serverIndex < widget.movie.episodes.length;
+                serverIndex++
+              ) ...[
+                _ServerTabButton(
+                  label: widget.movie.episodes[serverIndex].displayName,
+                  selected: serverIndex == _selectedServerIndex,
+                  onPressed: () {
+                    setState(() => _selectedServerIndex = serverIndex);
+                  },
                 ),
+                if (serverIndex < widget.movie.episodes.length - 1)
+                  const SizedBox(width: CineVietSpacing.sm),
+              ],
             ],
           ),
-          const SizedBox(height: CineVietSpacing.lg),
-        ],
+        ),
+        const SizedBox(height: CineVietSpacing.sm),
+        Wrap(
+          spacing: CineVietSpacing.sm,
+          runSpacing: CineVietSpacing.sm,
+          children: [
+            for (
+              var episodeIndex = 0;
+              episodeIndex < selectedServer.items.length;
+              episodeIndex++
+            )
+              _EpisodeButton(
+                item: selectedServer.items[episodeIndex],
+                selected: false,
+                onPressed: () =>
+                    widget.onSelected(_selectedServerIndex, episodeIndex),
+              ),
+          ],
+        ),
       ],
+    );
+  }
+}
+
+class _ServerTabButton extends StatelessWidget {
+  const _ServerTabButton({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocus(
+      borderRadius: BorderRadius.circular(CineVietRadius.full),
+      scale: 1.04,
+      onTap: onPressed,
+      builder: (context, tvFocused, child) {
+        final active = selected || tvFocused;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 140),
+          padding: const EdgeInsets.symmetric(
+            horizontal: CineVietSpacing.md,
+            vertical: CineVietSpacing.sm,
+          ),
+          decoration: BoxDecoration(
+            color: selected ? CineVietColors.accent : CineVietColors.card,
+            borderRadius: BorderRadius.circular(CineVietRadius.full),
+            border: Border.all(
+              color: active
+                  ? CineVietColors.accent
+                  : CineVietColors.borderLight,
+              width: active ? 2 : 1,
+            ),
+            boxShadow: tvFocused
+                ? [
+                    BoxShadow(
+                      color: CineVietColors.accent.withValues(alpha: 0.24),
+                      blurRadius: 18,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.dns_rounded,
+                size: 17,
+                color: selected
+                    ? const Color(0xFF061A13)
+                    : CineVietColors.accent,
+              ),
+              const SizedBox(width: CineVietSpacing.xs),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: selected
+                      ? const Color(0xFF061A13)
+                      : CineVietColors.text,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      child: const SizedBox.shrink(),
     );
   }
 }
