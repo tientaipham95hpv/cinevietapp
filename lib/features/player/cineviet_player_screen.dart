@@ -89,8 +89,6 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   List<String> _activeCandidateUrls = const [];
   int _activeCandidateIndex = 0;
   WebViewController? _embedController;
-  bool _embedLoading = false;
-  String? _embedError;
   double? _scrubProgress;
 
   bool get _isWatchTogether => _watchRoomCode != null;
@@ -337,35 +335,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(Colors.black)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (_) {
-            if (!mounted) return;
-            setState(() {
-              _embedLoading = true;
-              _embedError = null;
-            });
-          },
-          onPageFinished: (_) {
-            if (!mounted) return;
-            setState(() => _embedLoading = false);
-          },
-          onWebResourceError: (error) {
-            if (!mounted || error.isForMainFrame != true) return;
-            setState(() {
-              _embedLoading = false;
-              _embedError = 'Nguồn embed chưa tải được. Vui lòng thử server khác.';
-            });
-          },
-        ),
-      )
       ..loadRequest(Uri.parse(embedUrl));
 
     if (!mounted) return true;
     setState(() {
       _embedController = controller;
-      _embedLoading = true;
-      _embedError = null;
       _loading = false;
       _buffering = false;
       _error = null;
@@ -1835,139 +1809,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   Widget _buildEmbedFallback(WebViewController controller) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        ColoredBox(
-          color: Colors.black,
-          child: WebViewWidget(controller: controller),
-        ),
-        IgnorePointer(
-          child: AnimatedOpacity(
-            opacity: _embedLoading ? 1 : 0,
-            duration: const Duration(milliseconds: 180),
-            child: Container(
-              color: Colors.black.withValues(alpha: 0.72),
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: CineVietColors.accent),
-                    SizedBox(height: CineVietSpacing.md),
-                    Text(
-                      'Đang chuyển sang nguồn embed...',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        if (_embedError != null)
-          Center(
-            child: Container(
-              width: 520,
-              margin: const EdgeInsets.all(CineVietSpacing.xl),
-              padding: const EdgeInsets.all(CineVietSpacing.xl),
-              decoration: BoxDecoration(
-                color: CineVietColors.card.withValues(alpha: 0.94),
-                borderRadius: BorderRadius.circular(CineVietRadius.xl),
-                border: Border.all(color: CineVietColors.borderLight),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.travel_explore_rounded,
-                    color: CineVietColors.accent,
-                    size: 46,
-                  ),
-                  const SizedBox(height: CineVietSpacing.md),
-                  const Text(
-                    'Nguồn embed chưa sẵn sàng',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 21,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: CineVietSpacing.sm),
-                  Text(
-                    _embedError!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: CineVietColors.textSoft,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: CineVietSpacing.lg),
-                  TvFocus(
-                    onTap: _showServerEpisodeSheet,
-                    borderRadius: BorderRadius.circular(CineVietRadius.full),
-                    child: FilledButton.icon(
-                      onPressed: _showServerEpisodeSheet,
-                      icon: const Icon(Icons.playlist_play_rounded),
-                      label: const Text('Chọn nguồn khác'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        Positioned(
-          left: 18,
-          bottom: 18,
-          child: IgnorePointer(
-            child: AnimatedOpacity(
-              opacity: _showControls || _embedLoading ? 1 : 0,
-              duration: const Duration(milliseconds: 160),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(CineVietRadius.full),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: CineVietSpacing.md,
-                      vertical: CineVietSpacing.sm,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.48),
-                      borderRadius: BorderRadius.circular(CineVietRadius.full),
-                      border: Border.all(
-                        color: CineVietColors.accent.withValues(alpha: 0.34),
-                      ),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.public_rounded,
-                          color: CineVietColors.accent,
-                          size: 18,
-                        ),
-                        SizedBox(width: CineVietSpacing.xs),
-                        Text(
-                          'Đang phát bằng nguồn embed',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+    return ColoredBox(
+      color: Colors.black,
+      child: WebViewWidget(controller: controller),
     );
   }
 
