@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
 import '../../core/widgets/tv_focus.dart';
@@ -87,6 +88,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   static const String _autoNextPrefKey = 'player_auto_next_episode';
   List<String> _activeCandidateUrls = const [];
   int _activeCandidateIndex = 0;
+  WebViewController? _embedController;
+  bool _embedLoading = false;
+  String? _embedError;
   double? _scrubProgress;
 
   bool get _isWatchTogether => _watchRoomCode != null;
@@ -111,6 +115,12 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final m3u8 = episode.linkM3u8?.trim() ?? '';
     if (m3u8.isNotEmpty) return m3u8;
     return episode.linkEmbed?.trim() ?? '';
+  }
+
+  bool get _supportsEmbedFallback => Platform.isAndroid || Platform.isIOS;
+
+  String _embedUrlOf(EpisodeItem episode) {
+    return (episode.linkEmbed ?? '').trim();
   }
 
   String _episodeKey(EpisodeItem episode) {
@@ -299,6 +309,70 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     // Windows keeps original-first behavior; Android TV uses safer proxy-first
     // multi-source logic above.
     return [raw, proxy];
+  }
+
+  List<String> get _candidateEmbedUrls {
+    if (!_supportsEmbedFallback) return const [];
+    final urls = <String>[];
+    final seen = <String>{};
+    for (final entry in _candidateEpisodesForAndroidTv) {
+      final embed = _embedUrlOf(entry.value);
+      if (embed.isEmpty || !embed.startsWith(RegExp(r'https?://'))) continue;
+      if (seen.add(embed)) urls.add(embed);
+    }
+    return urls;
+  }
+
+  bool _activateEmbedFallback({String? reason}) {
+    final embedUrl = _candidateEmbedUrls.firstOrNull;
+    if (embedUrl == null || embedUrl.isEmpty) return false;
+
+    try {
+      _controller?.removeListener(_syncPlayerState);
+      _controller?.dispose();
+    } catch (_) {}
+    _controller = null;
+    _progressTimer?.cancel();
+
+    final controller = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (_) {
+            if (!mounted) return;
+            setState(() {
+              _embedLoading = true;
+              _embedError = null;
+            });
+          },
+          onPageFinished: (_) {
+            if (!mounted) return;
+            setState(() => _embedLoading = false);
+          },
+          onWebResourceError: (error) {
+            if (!mounted || error.isForMainFrame != true) return;
+            setState(() {
+              _embedLoading = false;
+              _embedError = 'Nguồn embed chưa tải được. Vui lòng thử server khác.';
+            });
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(embedUrl));
+
+    if (!mounted) return true;
+    setState(() {
+      _embedController = controller;
+      _embedLoading = true;
+      _embedError = null;
+      _loading = false;
+      _buffering = false;
+      _error = null;
+      _showControls = true;
+    });
+    _armHideTimer();
+    return true;
   }
 
   List<_SubtitleCue> _parseWebVtt(String text) {
@@ -715,6 +789,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _activeCandidateIndex = 0;
     if (candidateUrls.isEmpty ||
         !candidateUrls.first.startsWith(RegExp(r'https?://'))) {
+      if (_activateEmbedFallback(reason: 'no-hls-candidate')) return;
       setState(() {
         _loading = false;
         _error = 'Tập này chưa có link m3u8 hợp lệ để phát.';
@@ -759,6 +834,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
     if (controller == null) {
       if (!mounted) return;
+      if (_activateEmbedFallback(reason: '$lastError')) return;
       setState(() {
         _loading = false;
         _error = _friendlyPlaybackError(lastError);
@@ -834,6 +910,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
     _controller?.removeListener(_syncPlayerState);
     _controller?.dispose();
+    _embedController = null;
     unawaited(_resetScreenBrightness());
     if (!_switchingEpisode) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -943,7 +1020,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       return;
     }
     final nextIndex = _activeCandidateIndex + 1;
-    if (nextIndex >= _activeCandidateUrls.length) return;
+    if (nextIndex >= _activeCandidateUrls.length) {
+      if (_activateEmbedFallback(reason: playbackError)) return;
+      return;
+    }
 
     _recoveringPlaybackError = true;
     setState(() {
@@ -1001,6 +1081,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
     _recoveringPlaybackError = false;
     if (!mounted) return;
+    if (_activateEmbedFallback(reason: '$lastError')) return;
     setState(() {
       _loading = false;
       _error = _friendlyPlaybackError(lastError ?? playbackError);
@@ -1428,6 +1509,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   }
 
   void _togglePlay() {
+    if (_embedController != null) {
+      _revealControls();
+      return;
+    }
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     try {
@@ -1632,6 +1717,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
 
   Widget _buildVideo() {
     final controller = _controller;
+    final embedController = _embedController;
+    if (embedController != null) {
+      return _buildEmbedFallback(embedController);
+    }
     if (_loading) {
       return const Center(
         child: CircularProgressIndicator(color: CineVietColors.accent),
@@ -1742,6 +1831,143 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
           _buildSubtitleOverlay(controller),
         ],
       ),
+    );
+  }
+
+  Widget _buildEmbedFallback(WebViewController controller) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(
+          color: Colors.black,
+          child: WebViewWidget(controller: controller),
+        ),
+        IgnorePointer(
+          child: AnimatedOpacity(
+            opacity: _embedLoading ? 1 : 0,
+            duration: const Duration(milliseconds: 180),
+            child: Container(
+              color: Colors.black.withValues(alpha: 0.72),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: CineVietColors.accent),
+                    SizedBox(height: CineVietSpacing.md),
+                    Text(
+                      'Đang chuyển sang nguồn embed...',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_embedError != null)
+          Center(
+            child: Container(
+              width: 520,
+              margin: const EdgeInsets.all(CineVietSpacing.xl),
+              padding: const EdgeInsets.all(CineVietSpacing.xl),
+              decoration: BoxDecoration(
+                color: CineVietColors.card.withValues(alpha: 0.94),
+                borderRadius: BorderRadius.circular(CineVietRadius.xl),
+                border: Border.all(color: CineVietColors.borderLight),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.travel_explore_rounded,
+                    color: CineVietColors.accent,
+                    size: 46,
+                  ),
+                  const SizedBox(height: CineVietSpacing.md),
+                  const Text(
+                    'Nguồn embed chưa sẵn sàng',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: CineVietSpacing.sm),
+                  Text(
+                    _embedError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: CineVietColors.textSoft,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: CineVietSpacing.lg),
+                  TvFocus(
+                    onTap: _showServerEpisodeSheet,
+                    borderRadius: BorderRadius.circular(CineVietRadius.full),
+                    child: FilledButton.icon(
+                      onPressed: _showServerEpisodeSheet,
+                      icon: const Icon(Icons.playlist_play_rounded),
+                      label: const Text('Chọn nguồn khác'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Positioned(
+          left: 18,
+          bottom: 18,
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: _showControls || _embedLoading ? 1 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(CineVietRadius.full),
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: CineVietSpacing.md,
+                      vertical: CineVietSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.48),
+                      borderRadius: BorderRadius.circular(CineVietRadius.full),
+                      border: Border.all(
+                        color: CineVietColors.accent.withValues(alpha: 0.34),
+                      ),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.public_rounded,
+                          color: CineVietColors.accent,
+                          size: 18,
+                        ),
+                        SizedBox(width: CineVietSpacing.xs),
+                        Text(
+                          'Đang phát bằng nguồn embed',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
