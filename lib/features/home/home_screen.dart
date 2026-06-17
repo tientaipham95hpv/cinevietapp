@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/platform/platform_detector.dart';
 import '../../core/theme/cineviet_colors.dart';
@@ -39,63 +38,12 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
-  final FocusScopeNode _contentFocusScope = FocusScopeNode(
-    debugLabel: 'homeContent',
-  );
   final Set<String> _prefetchedPosters = <String>{};
 
   @override
-  void initState() {
-    super.initState();
-    HardwareKeyboard.instance.addHandler(_handleRemoteKey);
-  }
-
-  @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
-    _contentFocusScope.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  bool _handleRemoteKey(KeyEvent event) {
-    if (event is! KeyDownEvent || !mounted || !_scrollController.hasClients) {
-      return false;
-    }
-    final platform = PlatformDetector.of(context);
-    if (!platform.isTv && !platform.isDesktop) return false;
-    // Chỉ cuộn home khi focus thực sự nằm trong nội dung home. Nếu focus đang ở
-    // sidebar (chọn menu), không cuộn danh sách phim theo.
-    if (!_contentFocusScope.hasFocus) return false;
-
-    final current = _scrollController.offset;
-    final max = _scrollController.position.maxScrollExtent;
-    const step = 360.0;
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      _animateTo((current + step).clamp(0.0, max));
-      return true;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      _animateTo((current - step).clamp(0.0, max));
-      return true;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.pageDown) {
-      _animateTo((current + 760).clamp(0.0, max));
-      return true;
-    }
-    if (event.logicalKey == LogicalKeyboardKey.pageUp) {
-      _animateTo((current - 760).clamp(0.0, max));
-      return true;
-    }
-    return false;
-  }
-
-  void _animateTo(double offset) {
-    _scrollController.animateTo(
-      offset,
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-    );
   }
 
   void _prefetchPosters(BuildContext context, Iterable<Movie> movies) {
@@ -152,9 +100,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? 560.0
         : 640.0;
 
-    return FocusScope(
-      node: _contentFocusScope,
-      child: RefreshIndicator(
+    return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(featuredMoviesProvider);
         ref.invalidate(latestMoviesProvider);
@@ -244,7 +190,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
         ],
-      ),
       ),
     );
   }

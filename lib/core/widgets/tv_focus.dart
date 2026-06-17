@@ -88,11 +88,37 @@ class _TvFocusState extends State<TvFocus> {
         }
         return KeyEventResult.ignored;
       },
-      onFocusChange: (value) => setState(() => _focused = value),
+      onFocusChange: (value) {
+        setState(() => _focused = value);
+        // TV/keyboard focus moved here: bring this item into view by scrolling
+        // every enclosing Scrollable (vertical page + horizontal rail). This
+        // replaces the old global key-scroll hack and never scrolls when focus
+        // is elsewhere (e.g. sidebar), so picking a menu no longer drags home.
+        if (value && widget.enabled) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final ctx = context;
+            if (!ctx.mounted) return;
+            Scrollable.ensureVisible(
+              ctx,
+              alignment: 0.5,
+              alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+            );
+          });
+        }
+      },
       child: Material(
         color: Colors.transparent,
         borderRadius: radius,
         child: InkWell(
+          // TvFocus's own Focus node owns D-pad/keyboard focus and key
+          // handling. The inner InkWell must NOT also request focus, otherwise
+          // every TvFocus exposes two focus stops which traps directional
+          // navigation and makes some controls (e.g. the search button) feel
+          // unresponsive on Android TV.
+          canRequestFocus: false,
           borderRadius: radius,
           focusColor: Colors.transparent,
           hoverColor: CineVietColors.accentSoft,

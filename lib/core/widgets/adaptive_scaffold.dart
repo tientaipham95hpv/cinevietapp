@@ -39,6 +39,22 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     setState(() => _index = value);
   }
 
+  // IndexedStack keeps every tab alive in the tree and only hides the inactive
+  // ones from painting. Their focusable widgets, however, still accept D-pad /
+  // keyboard focus, so on Android TV focus silently lands on an invisible tab:
+  // the user can't cross into the sidebar, the search button seems dead, and
+  // the home rail scrolls on its own. Wrapping each page in ExcludeFocus keeps
+  // focus confined to the visible tab.
+  Widget _pages() {
+    return IndexedStack(
+      index: _index,
+      children: [
+        for (var i = 0; i < widget.children.length; i++)
+          ExcludeFocus(excluding: i != _index, child: widget.children[i]),
+      ],
+    );
+  }
+
   void _openSearch() {
     Navigator.of(
       context,
@@ -60,7 +76,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     return Scaffold(
       body: Stack(
         children: [
-          IndexedStack(index: _index, children: widget.children),
+          _pages(),
           if (_index == 0)
             Positioned(
               right: CineVietSpacing.md,
@@ -115,7 +131,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
               right: 0,
               top: 0,
               bottom: 0,
-              child: IndexedStack(index: _index, children: widget.children),
+              child: _pages(),
             ),
             AnimatedPositioned(
               duration: const Duration(milliseconds: 240),
@@ -167,7 +183,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           Expanded(
             child: Stack(
               children: [
-                IndexedStack(index: _index, children: widget.children),
+                _pages(),
                 Positioned(
                   right: CineVietSpacing.lg,
                   top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
@@ -212,7 +228,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
           Expanded(
             child: Stack(
               children: [
-                IndexedStack(index: _index, children: widget.children),
+                _pages(),
                 if (_index == 0)
                   Positioned(
                     right: CineVietSpacing.lg,
