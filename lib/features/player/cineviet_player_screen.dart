@@ -90,6 +90,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   int _activeCandidateIndex = 0;
   WebViewController? _embedController;
   double? _scrubProgress;
+  final FocusNode _progressFocusNode = FocusNode(debugLabel: 'PlayerProgress');
+  final FocusNode _playControlFocusNode = FocusNode(
+    debugLabel: 'PlayerPlayControl',
+  );
+  bool _progressFocused = false;
 
   bool get _isWatchTogether => _watchRoomCode != null;
   bool get _isWatchHost =>
@@ -877,6 +882,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _gestureHintTimer?.cancel();
     _levelApplyTimer?.cancel();
     _watchChatController.dispose();
+    _progressFocusNode.dispose();
+    _playControlFocusNode.dispose();
     _saveProgress();
     if (_isWatchTogether && _isWatchHost) {
       WatchTogetherService.closeActiveRoom(forceDelete: true);
@@ -1562,6 +1569,33 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     _saveProgress();
   }
 
+  KeyEventResult _handleTvProgressKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      _seekBy(const Duration(seconds: -10));
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowRight) {
+      _seekBy(const Duration(seconds: 10));
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.arrowUp ||
+        key == LogicalKeyboardKey.arrowDown) {
+      _playControlFocusNode.requestFocus();
+      _revealControls();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.space ||
+        key == LogicalKeyboardKey.gameButtonA) {
+      _togglePlay();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   void _seekBy(Duration delta) {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
@@ -2102,6 +2136,57 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     );
   }
 
+  Widget _buildProgressControl(double displayProgress) {
+    final slider = SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        trackHeight: 6,
+        activeTrackColor: CineVietColors.accent,
+        inactiveTrackColor: Colors.white24,
+        thumbColor: CineVietColors.accent,
+        overlayColor: CineVietColors.accentGlow,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8),
+      ),
+      child: Slider(
+        value: displayProgress,
+        onChangeStart: _previewSeekToFraction,
+        onChanged: _previewSeekToFraction,
+        onChangeEnd: _commitSeekToFraction,
+      ),
+    );
+
+    if (!_isAndroidTvBuild) return slider;
+
+    return Focus(
+      focusNode: _progressFocusNode,
+      onKeyEvent: (_, event) => _handleTvProgressKey(event),
+      onFocusChange: (focused) {
+        if (!mounted) return;
+        setState(() => _progressFocused = focused);
+        if (focused) _revealControls();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(CineVietRadius.full),
+          border: Border.all(
+            color: _progressFocused
+                ? CineVietColors.accent
+                : Colors.transparent,
+            width: 2,
+          ),
+          boxShadow: _progressFocused
+              ? const [
+                  BoxShadow(color: CineVietColors.accentGlow, blurRadius: 20),
+                ]
+              : null,
+        ),
+        child: ExcludeFocus(child: slider),
+      ),
+    );
+  }
+
   Widget _buildControls() {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) {
@@ -2144,28 +2229,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
-                  Expanded(
-                    child: SliderTheme(
-                      data: SliderTheme.of(context).copyWith(
-                        trackHeight: 6,
-                        activeTrackColor: CineVietColors.accent,
-                        inactiveTrackColor: Colors.white24,
-                        thumbColor: CineVietColors.accent,
-                        overlayColor: CineVietColors.accentGlow,
-                        thumbShape: const RoundSliderThumbShape(
-                          enabledThumbRadius: 8,
-                        ),
-                      ),
-                      child: ExcludeFocus(
-                        child: Slider(
-                          value: displayProgress,
-                          onChangeStart: _previewSeekToFraction,
-                          onChanged: _previewSeekToFraction,
-                          onChangeEnd: _commitSeekToFraction,
-                        ),
-                      ),
-                    ),
-                  ),
+                  Expanded(child: _buildProgressControl(displayProgress)),
                   Text(
                     _fmt(duration),
                     style: const TextStyle(
@@ -2220,6 +2284,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                           primary: true,
                           large: true,
                           autofocus: true,
+                          focusNode: _playControlFocusNode,
                           onTap: _togglePlay,
                         ),
                       ),
@@ -3061,6 +3126,7 @@ class _PlayerRoundButton extends StatelessWidget {
     this.primary = false,
     this.large = false,
     this.autofocus = false,
+    this.focusNode,
   });
 
   final IconData icon;
@@ -3069,6 +3135,7 @@ class _PlayerRoundButton extends StatelessWidget {
   final bool primary;
   final bool large;
   final bool autofocus;
+  final FocusNode? focusNode;
 
   @override
   Widget build(BuildContext context) {
@@ -3078,6 +3145,7 @@ class _PlayerRoundButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(CineVietRadius.full),
       scale: 1.07,
       autofocus: autofocus,
+      focusNode: focusNode,
       child: Tooltip(
         message: label,
         child: Container(
