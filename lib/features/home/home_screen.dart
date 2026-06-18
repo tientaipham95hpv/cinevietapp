@@ -463,26 +463,6 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                   ),
                 ),
               ),
-              if (widget.platform.isTv)
-                Positioned(
-                  right: widget.platform.isMobile
-                      ? CineVietSpacing.md
-                      : CineVietSpacing.xl,
-                  top: widget.platform.isMobile ? 92 : 120,
-                  child: Column(
-                    children: [
-                      _HeroArrow(
-                        icon: Icons.keyboard_arrow_up_rounded,
-                        onTap: () => _go(safeIndex - 1),
-                      ),
-                      const SizedBox(height: CineVietSpacing.sm),
-                      _HeroArrow(
-                        icon: Icons.keyboard_arrow_down_rounded,
-                        onTap: () => _go(safeIndex + 1),
-                      ),
-                    ],
-                  ),
-                ),
             ],
           ],
         ),
@@ -529,27 +509,6 @@ class _HeroPill extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
         ),
       ],
-    ),
-  );
-}
-
-class _HeroArrow extends StatelessWidget {
-  const _HeroArrow({required this.icon, required this.onTap});
-  final IconData icon;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => TvFocus(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(CineVietRadius.full),
-    child: Container(
-      width: 42,
-      height: 42,
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.44),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white24),
-      ),
-      child: Icon(icon, color: Colors.white),
     ),
   );
 }
@@ -827,14 +786,21 @@ class _RealMovieCard extends ConsumerWidget {
                   movie.englishTitleLine,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, color: CineVietColors.textSoft),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: CineVietColors.textSoft,
+                  ),
                 ),
                 const SizedBox(height: CineVietSpacing.xs),
                 Text(
                   movie.yearLine,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: CineVietColors.muted),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: CineVietColors.muted,
+                  ),
                 ),
               ],
             ),
@@ -925,9 +891,9 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
     try {
       await ref.read(cloudHistoryServiceProvider).remove(widget.item);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Đã xóa khỏi Xem tiếp.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã xóa khỏi Xem tiếp.')));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -940,8 +906,6 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
 
   Future<void> _openResume() => openWatchHistoryItem(context, widget.item);
 
-
-
   @override
   Widget build(BuildContext context) => TvFocus(
     onTap: _openResume,
@@ -950,103 +914,103 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
       behavior: HitTestBehavior.opaque,
       onTap: _openResume,
       child: Container(
-      width: widget.width,
-      padding: const EdgeInsets.all(CineVietSpacing.sm),
-      decoration: BoxDecoration(
-        color: CineVietColors.card,
-        borderRadius: BorderRadius.circular(CineVietRadius.lg),
-        border: Border.all(color: CineVietColors.border),
-      ),
-      child: Stack(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 96,
-                height: double.infinity,
-                clipBehavior: Clip.antiAlias,
-                decoration: BoxDecoration(
-                  color: CineVietColors.bg3,
-                  borderRadius: BorderRadius.circular(CineVietRadius.md),
+        width: widget.width,
+        padding: const EdgeInsets.all(CineVietSpacing.sm),
+        decoration: BoxDecoration(
+          color: CineVietColors.card,
+          borderRadius: BorderRadius.circular(CineVietRadius.lg),
+          border: Border.all(color: CineVietColors.border),
+        ),
+        child: Stack(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 96,
+                  height: double.infinity,
+                  clipBehavior: Clip.antiAlias,
+                  decoration: BoxDecoration(
+                    color: CineVietColors.bg3,
+                    borderRadius: BorderRadius.circular(CineVietRadius.md),
+                  ),
+                  child:
+                      (widget.item.backdropUrl?.isNotEmpty == true ||
+                          widget.item.posterUrl?.isNotEmpty == true)
+                      ? CachedNetworkImage(
+                          imageUrl: widget.item.backdropUrl?.isNotEmpty == true
+                              ? widget.item.backdropUrl!
+                              : widget.item.posterUrl!,
+                          fit: BoxFit.cover,
+                        )
+                      : const Icon(
+                          Icons.movie_rounded,
+                          color: CineVietColors.accent,
+                        ),
                 ),
-                child:
-                    (widget.item.backdropUrl?.isNotEmpty == true ||
-                        widget.item.posterUrl?.isNotEmpty == true)
-                    ? CachedNetworkImage(
-                        imageUrl: widget.item.backdropUrl?.isNotEmpty == true
-                            ? widget.item.backdropUrl!
-                            : widget.item.posterUrl!,
-                        fit: BoxFit.cover,
-                      )
-                    : const Icon(
-                        Icons.movie_rounded,
+                const SizedBox(width: CineVietSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        widget.item.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                      const SizedBox(height: CineVietSpacing.xs),
+                      Text(
+                        '${widget.item.episodeName} • ${(widget.item.progress * 100).round()}%',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: CineVietColors.textSoft,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: CineVietSpacing.sm),
+                      LinearProgressIndicator(
+                        value: widget.item.progress,
+                        backgroundColor: CineVietColors.border,
                         color: CineVietColors.accent,
                       ),
-              ),
-              const SizedBox(width: CineVietSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      widget.item.title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w900),
-                    ),
-                    const SizedBox(height: CineVietSpacing.xs),
-                    Text(
-                      '${widget.item.episodeName} • ${(widget.item.progress * 100).round()}%',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: CineVietColors.textSoft,
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: CineVietSpacing.sm),
-                    LinearProgressIndicator(
-                      value: widget.item.progress,
-                      backgroundColor: CineVietColors.border,
-                      color: CineVietColors.accent,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Tooltip(
-              message: 'Xóa khỏi Xem tiếp',
-              child: Material(
-                color: Colors.black.withValues(alpha: 0.62),
-                shape: const CircleBorder(),
-                child: InkWell(
-                  customBorder: const CircleBorder(),
-                  onTap: _removing ? null : _remove,
-                  child: SizedBox(
-                    width: 34,
-                    height: 34,
-                    child: _removing
-                        ? const Padding(
-                            padding: EdgeInsets.all(9),
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(
-                            Icons.close_rounded,
-                            size: 20,
-                            color: Colors.white,
-                          ),
+              ],
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Tooltip(
+                message: 'Xóa khỏi Xem tiếp',
+                child: Material(
+                  color: Colors.black.withValues(alpha: 0.62),
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: _removing ? null : _remove,
+                    child: SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: _removing
+                          ? const Padding(
+                              padding: EdgeInsets.all(9),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(
+                              Icons.close_rounded,
+                              size: 20,
+                              color: Colors.white,
+                            ),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     ),
   );
@@ -1097,4 +1061,3 @@ String _compactLanguage(String text) => text
     .replaceAll('Vietsub', 'VS')
     .replaceAll('Thuyết Minh', 'TM')
     .replaceAll('Lồng Tiếng', 'LT');
-

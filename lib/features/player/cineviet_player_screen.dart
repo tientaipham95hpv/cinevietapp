@@ -908,6 +908,23 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       return false;
     }
     final key = event.logicalKey;
+    final focusContext = focus?.context;
+    final focusInPlayerChrome =
+        _showControls &&
+        focusContext != null &&
+        focusContext.findAncestorWidgetOfExactType<_PlayerChromeFocusRoot>() !=
+            null;
+    if (focusInPlayerChrome &&
+        (key == LogicalKeyboardKey.select ||
+            key == LogicalKeyboardKey.enter ||
+            key == LogicalKeyboardKey.space ||
+            key == LogicalKeyboardKey.gameButtonA ||
+            key == LogicalKeyboardKey.arrowLeft ||
+            key == LogicalKeyboardKey.arrowRight ||
+            key == LogicalKeyboardKey.arrowUp ||
+            key == LogicalKeyboardKey.arrowDown)) {
+      return false;
+    }
     if (key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.space ||
@@ -2060,22 +2077,24 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
               CineVietSpacing.lg,
               CineVietSpacing.lg,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _PlayerTopBar(
-                  title: widget.movie.title,
-                  subtitle:
-                      '${widget.server.displayName} • ${widget.episode.displayName}',
-                  resumeText: _resumeItem != null && !_resumeItem!.completed
-                      ? 'Tiếp tục từ ${_fmt(_resumeItem!.position)}'
-                      : null,
-                  onBack: () => Navigator.of(context).maybePop(),
-                  onLock: _toggleLock,
-                ),
-                const Spacer(),
-                _buildControls(),
-              ],
+            child: _PlayerChromeFocusRoot(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _PlayerTopBar(
+                    title: widget.movie.title,
+                    subtitle:
+                        '${widget.server.displayName} • ${widget.episode.displayName}',
+                    resumeText: _resumeItem != null && !_resumeItem!.completed
+                        ? 'Tiếp tục từ ${_fmt(_resumeItem!.position)}'
+                        : null,
+                    onBack: () => Navigator.of(context).maybePop(),
+                    onLock: _toggleLock,
+                  ),
+                  const Spacer(),
+                  _buildControls(),
+                ],
+              ),
             ),
           ),
         ),
@@ -2137,11 +2156,13 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
                           enabledThumbRadius: 8,
                         ),
                       ),
-                      child: Slider(
-                        value: displayProgress,
-                        onChangeStart: _previewSeekToFraction,
-                        onChanged: _previewSeekToFraction,
-                        onChangeEnd: _commitSeekToFraction,
+                      child: ExcludeFocus(
+                        child: Slider(
+                          value: displayProgress,
+                          onChangeStart: _previewSeekToFraction,
+                          onChanged: _previewSeekToFraction,
+                          onChangeEnd: _commitSeekToFraction,
+                        ),
                       ),
                     ),
                   ),
@@ -2913,6 +2934,15 @@ class _EpisodeChip extends StatelessWidget {
       ),
     );
   }
+}
+
+class _PlayerChromeFocusRoot extends StatelessWidget {
+  const _PlayerChromeFocusRoot({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
 }
 
 class _PlayerTopBar extends StatelessWidget {

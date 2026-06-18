@@ -39,6 +39,11 @@ class _SearchBrowseScreenState extends ConsumerState<SearchBrowseScreen> {
     super.initState();
     _searchController.text = _search;
     HardwareKeyboard.instance.addHandler(_handleRemoteKey);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scrollController.hasClients) _scrollController.jumpTo(0);
+      _searchFocusNode.requestFocus();
+    });
   }
 
   @override
@@ -258,6 +263,7 @@ class _SearchBox extends StatelessWidget {
     return TextField(
       controller: controller,
       focusNode: focusNode,
+      autofocus: true,
       onChanged: onChanged,
       textInputAction: TextInputAction.search,
       onSubmitted: (_) => nextFocusNode.requestFocus(),

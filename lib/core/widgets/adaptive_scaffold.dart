@@ -32,7 +32,6 @@ class AdaptiveScaffold extends StatefulWidget {
 class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   int _index = 0;
   bool _tabletSidebarOpen = false;
-  bool _tvRailExpanded = false;
 
   void _select(int value) {
     if (value == _index) return;
@@ -170,7 +169,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   }
 
   Widget _tv(BuildContext context, PlatformInfo platform) {
-    final railWidth = _tvRailExpanded ? 220.0 : 128.0;
+    const railWidth = 128.0;
     return Scaffold(
       body: Row(
         children: [
@@ -178,7 +177,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             width: railWidth,
-            child: _sidePanel(expanded: _tvRailExpanded, tvMode: true),
+            child: _sidePanel(expanded: false, tvMode: true),
           ),
           Expanded(
             child: Stack(
@@ -198,14 +197,6 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                         ),
                         const SizedBox(width: CineVietSpacing.sm),
                       ],
-                      _glassButton(
-                        icon: _tvRailExpanded
-                            ? Icons.keyboard_double_arrow_left_rounded
-                            : Icons.keyboard_double_arrow_right_rounded,
-                        onTap: () =>
-                            setState(() => _tvRailExpanded = !_tvRailExpanded),
-                        tvFocusable: true,
-                      ),
                     ],
                   ),
                 ),
