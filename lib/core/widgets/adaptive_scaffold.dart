@@ -29,9 +29,35 @@ class AdaptiveScaffold extends StatefulWidget {
   State<AdaptiveScaffold> createState() => _AdaptiveScaffoldState();
 }
 
+/// InheritedWidget expose search FocusNode cho các widget con
+/// (VD: _HeroButton trên TV cần ↑ → focus search).
+class TvSearchFocus extends InheritedWidget {
+  const TvSearchFocus({
+    super.key,
+    required this.searchFocusNode,
+    required super.child,
+  });
+
+  final FocusNode searchFocusNode;
+
+  static FocusNode? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<TvSearchFocus>()?.searchFocusNode;
+
+  @override
+  bool updateShouldNotify(TvSearchFocus oldWidget) =>
+      searchFocusNode != oldWidget.searchFocusNode;
+}
+
 class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   int _index = 0;
   bool _tabletSidebarOpen = false;
+  final FocusNode _searchFocusNode = FocusNode(debugLabel: 'tv-search-btn');
+
+  @override
+  void dispose() {
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
 
   void _select(int value) {
     if (value == _index) return;
@@ -170,40 +196,44 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
 
   Widget _tv(BuildContext context, PlatformInfo platform) {
     const railWidth = 128.0;
-    return Scaffold(
-      body: Row(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            width: railWidth,
-            child: _sidePanel(expanded: false, tvMode: true),
-          ),
-          Expanded(
-            child: Stack(
-              children: [
-                _pages(),
-                Positioned(
-                  right: CineVietSpacing.lg,
-                  top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_index == 0) ...[
-                        _glassButton(
-                          icon: Icons.search_rounded,
-                          onTap: _openSearch,
-                          tvFocusable: true,
-                        ),
-                        const SizedBox(width: CineVietSpacing.sm),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
+    return TvSearchFocus(
+      searchFocusNode: _searchFocusNode,
+      child: Scaffold(
+        body: Row(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              width: railWidth,
+              child: _sidePanel(expanded: false, tvMode: true),
             ),
-          ),
-        ],
+            Expanded(
+              child: Stack(
+                children: [
+                  _pages(),
+                  Positioned(
+                    right: CineVietSpacing.lg,
+                    top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_index == 0) ...[
+                          _glassButton(
+                            icon: Icons.search_rounded,
+                            onTap: _openSearch,
+                            tvFocusable: true,
+                            focusNode: _searchFocusNode,
+                          ),
+                          const SizedBox(width: CineVietSpacing.sm),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -275,12 +305,14 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     required IconData icon,
     required VoidCallback onTap,
     bool tvFocusable = false,
+    FocusNode? focusNode,
   }) {
     // On TV the glass buttons (search / expand rail) must be reachable by the
     // D-pad; a bare InkWell is not focusable, so wrap with TvFocus there.
     return TvFocus(
       enabled: tvFocusable,
       onTap: onTap,
+      focusNode: focusNode,
       borderRadius: BorderRadius.circular(CineVietRadius.full),
       child: Material(
         color: CineVietColors.card.withValues(alpha: 0.78),

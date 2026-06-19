@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/platform/platform_detector.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
+import '../../core/widgets/adaptive_scaffold.dart' show TvSearchFocus;
 import '../../core/widgets/tv_focus.dart';
 import '../../data/models/movie.dart';
 import '../../data/models/watch_history.dart';
@@ -524,23 +526,43 @@ class _HeroButton extends ConsumerWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => FilledButton.icon(
-    style: FilledButton.styleFrom(
-      backgroundColor: CineVietColors.accent,
-      foregroundColor: CineVietColors.bg,
-      padding: const EdgeInsets.symmetric(
-        horizontal: CineVietSpacing.lg,
-        vertical: CineVietSpacing.md,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final button = FilledButton.icon(
+      style: FilledButton.styleFrom(
+        backgroundColor: CineVietColors.accent,
+        foregroundColor: CineVietColors.bg,
+        padding: const EdgeInsets.symmetric(
+          horizontal: CineVietSpacing.lg,
+          vertical: CineVietSpacing.md,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(CineVietRadius.full),
+          side: BorderSide(color: CineVietColors.accent),
+        ),
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(CineVietRadius.full),
-        side: BorderSide(color: CineVietColors.accent),
-      ),
-    ),
-    onPressed: () => openMovieOrResume(context, ref, movie),
-    icon: Icon(icon),
-    label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
-  );
+      onPressed: () => openMovieOrResume(context, ref, movie),
+      icon: Icon(icon),
+      label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
+    );
+
+    // Trên TV: override D-pad ↑ từ nút "Xem ngay" → focus vào nút tìm kiếm
+    // (mặc định Flutter focus engine đi sang phải mới tới được search)
+    final searchNode = TvSearchFocus.maybeOf(context);
+    if (searchNode == null) return button;
+
+    return Focus(
+      canRequestFocus: false,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+          searchNode.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: button,
+    );
+  }
 }
 
 class _HomeMovieSection extends StatelessWidget {
