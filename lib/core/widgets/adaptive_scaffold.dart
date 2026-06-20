@@ -35,27 +35,36 @@ class TvSearchFocus extends InheritedWidget {
   const TvSearchFocus({
     super.key,
     required this.searchFocusNode,
+    required this.heroFocusNode,
     required super.child,
   });
 
   final FocusNode searchFocusNode;
+  final FocusNode heroFocusNode;
 
-  static FocusNode? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<TvSearchFocus>()?.searchFocusNode;
+  static FocusNode? maybeOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<TvSearchFocus>()
+      ?.searchFocusNode;
+  static FocusNode? heroOf(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<TvSearchFocus>()
+      ?.heroFocusNode;
 
   @override
   bool updateShouldNotify(TvSearchFocus oldWidget) =>
-      searchFocusNode != oldWidget.searchFocusNode;
+      searchFocusNode != oldWidget.searchFocusNode ||
+      heroFocusNode != oldWidget.heroFocusNode;
 }
 
 class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   int _index = 0;
   bool _tabletSidebarOpen = false;
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'tv-search-btn');
+  final FocusNode _heroFocusNode = FocusNode(debugLabel: 'tv-hero-play-btn');
 
   @override
   void dispose() {
     _searchFocusNode.dispose();
+    _heroFocusNode.dispose();
     super.dispose();
   }
 
@@ -198,6 +207,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     const railWidth = 128.0;
     return TvSearchFocus(
       searchFocusNode: _searchFocusNode,
+      heroFocusNode: _heroFocusNode,
       child: Scaffold(
         body: Row(
           children: [
@@ -213,7 +223,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                   _pages(),
                   Positioned(
                     right: CineVietSpacing.lg,
-                    top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
+                    top:
+                        MediaQuery.of(context).padding.top + CineVietSpacing.lg,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -223,6 +234,15 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                             onTap: _openSearch,
                             tvFocusable: true,
                             focusNode: _searchFocusNode,
+                            onKeyEvent: (node, event) {
+                              if (event is KeyDownEvent &&
+                                  event.logicalKey ==
+                                      LogicalKeyboardKey.arrowDown) {
+                                _heroFocusNode.requestFocus();
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
                           ),
                           const SizedBox(width: CineVietSpacing.sm),
                         ],
@@ -306,6 +326,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     required VoidCallback onTap,
     bool tvFocusable = false,
     FocusNode? focusNode,
+    FocusOnKeyEventCallback? onKeyEvent,
   }) {
     // On TV the glass buttons (search / expand rail) must be reachable by the
     // D-pad; a bare InkWell is not focusable, so wrap with TvFocus there.
@@ -313,6 +334,7 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       enabled: tvFocusable,
       onTap: onTap,
       focusNode: focusNode,
+      onKeyEvent: onKeyEvent,
       borderRadius: BorderRadius.circular(CineVietRadius.full),
       child: Material(
         color: CineVietColors.card.withValues(alpha: 0.78),

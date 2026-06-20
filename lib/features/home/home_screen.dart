@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/platform/platform_detector.dart';
@@ -125,6 +126,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: CustomScrollView(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
+        scrollCacheExtent: const ScrollCacheExtent.pixels(2500),
         slivers: [
           SliverToBoxAdapter(
             child: _FeaturedHeroCarousel(
@@ -416,19 +418,6 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: CineVietSpacing.sm),
-                        Text(
-                          (movie.description ?? '').isNotEmpty
-                              ? movie.description!
-                              : 'Cập nhật phim mới nhanh, chất lượng cao trên CineViet.',
-                          maxLines: widget.platform.isMobile ? 3 : 4,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: widget.platform.isMobile ? 14 : 16,
-                            color: CineVietColors.textSoft,
-                            height: 1.48,
-                          ),
-                        ),
                         const SizedBox(height: CineVietSpacing.lg),
                         _HeroButton(
                           movie: movie,
@@ -527,6 +516,55 @@ class _HeroButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final platform = PlatformDetector.of(context);
+    void open() => openMovieOrResume(context, ref, movie);
+
+    if (platform.isTv) {
+      final searchNode = TvSearchFocus.maybeOf(context);
+      final heroNode = TvSearchFocus.heroOf(context);
+      return TvFocus(
+        focusNode: heroNode,
+        onTap: open,
+        borderRadius: BorderRadius.circular(CineVietRadius.full),
+        padding: EdgeInsets.zero,
+        ensureVisibleAlignment: 0.18,
+        onKeyEvent: (_, event) {
+          if (event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.arrowUp &&
+              searchNode != null) {
+            searchNode.requestFocus();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: CineVietSpacing.lg,
+            vertical: CineVietSpacing.md,
+          ),
+          decoration: BoxDecoration(
+            color: CineVietColors.accent,
+            borderRadius: BorderRadius.circular(CineVietRadius.full),
+            border: Border.all(color: CineVietColors.accent),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: CineVietColors.bg),
+              const SizedBox(width: CineVietSpacing.xs),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: CineVietColors.bg,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final button = FilledButton.icon(
       style: FilledButton.styleFrom(
         backgroundColor: CineVietColors.accent,
@@ -540,28 +578,11 @@ class _HeroButton extends ConsumerWidget {
           side: BorderSide(color: CineVietColors.accent),
         ),
       ),
-      onPressed: () => openMovieOrResume(context, ref, movie),
+      onPressed: open,
       icon: Icon(icon),
       label: Text(label, style: const TextStyle(fontWeight: FontWeight.w900)),
     );
-
-    // Trên TV: override D-pad ↑ từ nút "Xem ngay" → focus vào nút tìm kiếm
-    // (mặc định Flutter focus engine đi sang phải mới tới được search)
-    final searchNode = TvSearchFocus.maybeOf(context);
-    if (searchNode == null) return button;
-
-    return Focus(
-      canRequestFocus: false,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-          searchNode.requestFocus();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: button,
-    );
+    return button;
   }
 }
 

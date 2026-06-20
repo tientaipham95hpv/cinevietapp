@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/movie.dart';
 import '../models/movie_page.dart';
@@ -16,8 +17,12 @@ final featuredMoviesProvider = FutureProvider<List<Movie>>(
 final movieDetailProvider = FutureProvider.family<Movie, String>(
   (ref, idOrSlug) => ref.watch(movieRepositoryProvider).detail(idOrSlug),
 );
-final browseMoviesProvider = FutureProvider.family<MoviePage, BrowseQuery>(
-  (ref, query) => ref.watch(movieRepositoryProvider).browse(query),
+final browseMoviesProvider = FutureProvider.autoDispose.family<MoviePage, BrowseQuery>(
+  (ref, query) {
+    final cancelToken = CancelToken();
+    ref.onDispose(() => cancelToken.cancel());
+    return ref.watch(movieRepositoryProvider).browse(query, cancelToken: cancelToken);
+  },
 );
 
 class MovieRepository {
@@ -75,7 +80,7 @@ class MovieRepository {
         .toList();
   }
 
-  Future<MoviePage> browse(BrowseQuery query, {int limit = 24}) async {
+  Future<MoviePage> browse(BrowseQuery query, {int limit = 24, CancelToken? cancelToken}) async {
     final params = <String, dynamic>{
       'page': query.page,
       'limit': limit,
@@ -87,7 +92,11 @@ class MovieRepository {
     if (query.genre.isNotEmpty) params['genre'] = query.genre;
     if (query.country.isNotEmpty) params['country'] = query.country;
     if (query.year.isNotEmpty) params['release_year'] = query.year;
-    final res = await api.dio.get('/movies', queryParameters: params);
+    final res = await api.dio.get(
+      '/movies',
+      queryParameters: params,
+      cancelToken: cancelToken,
+    );
     return MoviePage.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 

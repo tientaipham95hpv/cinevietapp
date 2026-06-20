@@ -16,6 +16,8 @@ class TvFocus extends StatefulWidget {
     this.enabled = true,
     this.builder,
     this.autofocus = false,
+    this.onKeyEvent,
+    this.ensureVisibleAlignment = 0.5,
   });
 
   final Widget child;
@@ -26,6 +28,8 @@ class TvFocus extends StatefulWidget {
   final FocusNode? focusNode;
   final bool enabled;
   final bool autofocus;
+  final FocusOnKeyEventCallback? onKeyEvent;
+  final double ensureVisibleAlignment;
   final Widget Function(BuildContext context, bool focused, Widget child)?
   builder;
 
@@ -77,6 +81,10 @@ class _TvFocusState extends State<TvFocus> {
       focusNode: widget.focusNode,
       autofocus: widget.autofocus,
       onKeyEvent: (node, event) {
+        final customResult = widget.onKeyEvent?.call(node, event);
+        if (customResult == KeyEventResult.handled) {
+          return KeyEventResult.handled;
+        }
         if (!widget.enabled || widget.onTap == null || event is! KeyDownEvent) {
           return KeyEventResult.ignored;
         }
@@ -101,11 +109,21 @@ class _TvFocusState extends State<TvFocus> {
             if (!ctx.mounted) return;
             Scrollable.ensureVisible(
               ctx,
-              alignment: 0.5,
+              alignment: widget.ensureVisibleAlignment,
               alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
               duration: const Duration(milliseconds: 240),
               curve: Curves.easeOutCubic,
             );
+            final parentScrollable = Scrollable.maybeOf(ctx);
+            if (parentScrollable != null && parentScrollable.context.mounted) {
+              Scrollable.ensureVisible(
+                parentScrollable.context,
+                alignment: 0.3,
+                alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+              );
+            }
           });
         }
       },

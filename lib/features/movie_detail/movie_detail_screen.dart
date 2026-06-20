@@ -389,14 +389,9 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                                 ),
                               ),
                               const SizedBox(height: CineVietSpacing.md),
-                              Text(
-                                movie.description ?? 'Chưa có mô tả.',
-                                maxLines: platform.isMobile ? 4 : 5,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: CineVietColors.textSoft,
-                                  height: 1.55,
-                                ),
+                              _ExpandableDescription(
+                                description:
+                                    movie.description ?? 'Chưa có mô tả.',
                               ),
                               const SizedBox(height: CineVietSpacing.lg),
                               _MovieActionGrid(
@@ -1861,6 +1856,69 @@ class _SectionTitle extends StatelessWidget {
     title,
     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
   );
+}
+
+class _ExpandableDescription extends StatefulWidget {
+  const _ExpandableDescription({required this.description});
+  final String description;
+
+  @override
+  State<_ExpandableDescription> createState() => _ExpandableDescriptionState();
+}
+
+class _ExpandableDescriptionState extends State<_ExpandableDescription> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final platform = PlatformDetector.of(context);
+
+    Widget buildText() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            widget.description,
+            maxLines: _expanded ? null : 2,
+            overflow: _expanded ? TextOverflow.visible : TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: CineVietColors.textSoft,
+              height: 1.55,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: CineVietSpacing.xs),
+          Text(
+            _expanded ? 'Thu gọn' : 'Xem thêm',
+            style: const TextStyle(
+              color: CineVietColors.accent,
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (platform.isTv) {
+      return TvFocus(
+        onTap: () => setState(() => _expanded = !_expanded),
+        borderRadius: BorderRadius.circular(CineVietRadius.md),
+        padding: const EdgeInsets.all(CineVietSpacing.xs),
+        child: buildText(),
+      );
+    }
+
+    return InkWell(
+      onTap: () => setState(() => _expanded = !_expanded),
+      borderRadius: BorderRadius.circular(CineVietRadius.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: CineVietSpacing.xs),
+        child: buildText(),
+      ),
+    );
+  }
 }
 
 class _Chip extends StatelessWidget {

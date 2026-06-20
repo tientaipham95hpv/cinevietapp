@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/platform/platform_detector.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
+import '../../core/widgets/tv_focus.dart';
 import '../../data/models/movie.dart';
 import '../../data/models/movie_page.dart';
 import '../../data/repositories/movie_repository.dart';
@@ -71,7 +72,7 @@ class _SearchBrowseScreenState extends ConsumerState<SearchBrowseScreen> {
         (key == LogicalKeyboardKey.arrowDown ||
             key == LogicalKeyboardKey.select ||
             key == LogicalKeyboardKey.enter)) {
-      FocusScope.of(context).requestFocus(_firstFilterFocusNode);
+      _firstFilterFocusNode.requestFocus();
       return true;
     }
     if (key == LogicalKeyboardKey.pageDown) {
@@ -94,7 +95,6 @@ class _SearchBrowseScreenState extends ConsumerState<SearchBrowseScreen> {
   }
 
   void _setSearch(String value) {
-    setState(() {});
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 420), () {
       if (!mounted) return;
@@ -246,7 +246,7 @@ class _SearchErrorState extends StatelessWidget {
   );
 }
 
-class _SearchBox extends StatelessWidget {
+class _SearchBox extends StatefulWidget {
   const _SearchBox({
     required this.controller,
     required this.focusNode,
@@ -259,47 +259,58 @@ class _SearchBox extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   @override
+  State<_SearchBox> createState() => _SearchBoxState();
+}
+
+class _SearchBoxState extends State<_SearchBox> {
+  @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      autofocus: true,
-      onChanged: onChanged,
-      textInputAction: TextInputAction.search,
-      onSubmitted: (_) => nextFocusNode.requestFocus(),
-      onEditingComplete: () => nextFocusNode.requestFocus(),
-      style: const TextStyle(
-        color: CineVietColors.text,
-        fontWeight: FontWeight.w700,
-      ),
-      decoration: InputDecoration(
-        hintText: 'Nhập tên phim, diễn viên, mô tả...',
-        prefixIcon: const Icon(
-          Icons.search_rounded,
-          color: CineVietColors.accent,
+    return ListenableBuilder(
+      listenable: widget.controller,
+      builder: (context, _) => TextField(
+        controller: widget.controller,
+        focusNode: widget.focusNode,
+        autofocus: true,
+        onChanged: widget.onChanged,
+        textInputAction: TextInputAction.search,
+        onSubmitted: (_) => widget.nextFocusNode.requestFocus(),
+        onEditingComplete: () => widget.nextFocusNode.requestFocus(),
+        style: const TextStyle(
+          color: CineVietColors.text,
+          fontWeight: FontWeight.w700,
         ),
-        suffixIcon: controller.text.isEmpty
-            ? null
-            : IconButton(
-                onPressed: () {
-                  controller.clear();
-                  onChanged('');
-                },
-                icon: const Icon(Icons.close_rounded),
-              ),
-        filled: true,
-        fillColor: CineVietColors.inputBg,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(CineVietRadius.xl),
-          borderSide: const BorderSide(color: CineVietColors.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(CineVietRadius.xl),
-          borderSide: const BorderSide(color: CineVietColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(CineVietRadius.xl),
-          borderSide: const BorderSide(color: CineVietColors.accent, width: 2),
+        decoration: InputDecoration(
+          hintText: 'Nhập tên phim, diễn viên, mô tả...',
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            color: CineVietColors.accent,
+          ),
+          suffixIcon: widget.controller.text.isEmpty
+              ? null
+              : IconButton(
+                  onPressed: () {
+                    widget.controller.clear();
+                    widget.onChanged('');
+                  },
+                  icon: const Icon(Icons.close_rounded),
+                ),
+          filled: true,
+          fillColor: CineVietColors.inputBg,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(CineVietRadius.xl),
+            borderSide: const BorderSide(color: CineVietColors.border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(CineVietRadius.xl),
+            borderSide: const BorderSide(color: CineVietColors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(CineVietRadius.xl),
+            borderSide: const BorderSide(
+              color: CineVietColors.accent,
+              width: 2,
+            ),
+          ),
         ),
       ),
     );
@@ -491,6 +502,7 @@ class _MovieGridSliver extends StatelessWidget {
             delegate: SliverChildBuilderDelegate(
               (context, index) => _BrowseMovieCard(
                 movie: page.movies[index],
+                platform: platform,
                 focusNode: index == 0 ? firstMovieFocusNode : null,
               ),
               childCount: page.movies.length,
@@ -535,118 +547,121 @@ class _MovieGridSliver extends StatelessWidget {
   }
 }
 
-class _BrowseMovieCard extends StatefulWidget {
-  const _BrowseMovieCard({required this.movie, this.focusNode});
+class _BrowseMovieCard extends StatelessWidget {
+  const _BrowseMovieCard({
+    required this.movie,
+    required this.platform,
+    this.focusNode,
+  });
   final Movie movie;
+  final PlatformInfo platform;
   final FocusNode? focusNode;
 
-  @override
-  State<_BrowseMovieCard> createState() => _BrowseMovieCardState();
-}
+  void _openMovie(BuildContext context) {
+    final idOrSlug = movie.slug.isNotEmpty ? movie.slug : movie.id.toString();
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => MovieDetailScreen(idOrSlug: idOrSlug)),
+    );
+  }
 
-class _BrowseMovieCardState extends State<_BrowseMovieCard> {
-  bool focused = false;
   @override
   Widget build(BuildContext context) {
-    final movie = widget.movie;
-    final active = focused;
-    return Focus(
-      focusNode: widget.focusNode,
-      onFocusChange: (value) => setState(() => focused = value),
-      child: AnimatedScale(
-        scale: active ? 1.04 : 1,
+    return TvFocus(
+      focusNode: focusNode,
+      onTap: () => _openMovie(context),
+      borderRadius: BorderRadius.circular(CineVietRadius.lg),
+      scale: 1.04,
+      builder: (context, focused, child) => AnimatedScale(
+        scale: focused ? 1.04 : 1,
         duration: const Duration(milliseconds: 140),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(CineVietRadius.lg),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => MovieDetailScreen(idOrSlug: movie.slug),
+        child: Container(
+          decoration: BoxDecoration(
+            color: CineVietColors.card,
+            borderRadius: BorderRadius.circular(CineVietRadius.lg),
+            border: Border.all(
+              color: focused ? CineVietColors.accent : CineVietColors.border,
+              width: focused ? 2 : 1,
             ),
+            boxShadow: focused
+                ? [
+                    BoxShadow(
+                      color: CineVietColors.accent.withValues(alpha: 0.22),
+                      blurRadius: 22,
+                    ),
+                  ]
+                : null,
           ),
-          child: Container(
-            decoration: BoxDecoration(
-              color: CineVietColors.card,
-              borderRadius: BorderRadius.circular(CineVietRadius.lg),
-              border: Border.all(
-                color: active ? CineVietColors.accent : CineVietColors.border,
-                width: active ? 2 : 1,
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    movie.posterUrl == null
+                        ? const ColoredBox(color: CineVietColors.bg3)
+                        : CachedNetworkImage(
+                            imageUrl: movie.posterUrl!,
+                            fit: BoxFit.cover,
+                            memCacheWidth: platform.isTv ? 420 : 320,
+                            maxWidthDiskCache: platform.isTv ? 520 : 420,
+                            fadeInDuration: Duration.zero,
+                            fadeOutDuration: Duration.zero,
+                          ),
+                    Positioned(
+                      left: CineVietSpacing.xs,
+                      top: CineVietSpacing.xs,
+                      child: _Badge(
+                        text: movie.quality ?? movie.episodeCurrent ?? 'HD',
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              boxShadow: active
-                  ? [
-                      BoxShadow(
-                        color: CineVietColors.accent.withValues(alpha: 0.22),
-                        blurRadius: 22,
+              Padding(
+                padding: const EdgeInsets.all(CineVietSpacing.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      movie.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        height: 1.2,
                       ),
-                    ]
-                  : null,
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      movie.posterUrl == null
-                          ? const ColoredBox(color: CineVietColors.bg3)
-                          : CachedNetworkImage(
-                              imageUrl: movie.posterUrl!,
-                              fit: BoxFit.cover,
-                            ),
-                      Positioned(
-                        left: CineVietSpacing.xs,
-                        top: CineVietSpacing.xs,
-                        child: _Badge(
-                          text: movie.quality ?? movie.episodeCurrent ?? 'HD',
-                        ),
+                    ),
+                    const SizedBox(height: CineVietSpacing.xs),
+                    Text(
+                      movie.englishTitleLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: CineVietColors.textSoft,
+                        fontSize: 12,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: CineVietSpacing.xs),
+                    Text(
+                      movie.yearLine,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: CineVietColors.muted,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(CineVietSpacing.sm),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        movie.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w900,
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: CineVietSpacing.xs),
-                      Text(
-                        movie.englishTitleLine,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: CineVietColors.textSoft,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: CineVietSpacing.xs),
-                      Text(
-                        movie.yearLine,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: CineVietColors.muted,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
+      child: const SizedBox.shrink(),
     );
   }
 }

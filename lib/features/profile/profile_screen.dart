@@ -203,7 +203,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-
   Widget _form(AuthState auth, bool tv) {
     return Container(
       padding: const EdgeInsets.all(CineVietSpacing.xl),
@@ -465,19 +464,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             icon: const Icon(Icons.qr_code_2_rounded),
             label: const Text('Đăng nhập nhanh bằng mã/QR'),
           ),
-          const SizedBox(height: CineVietSpacing.md),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: auth.loading ? null : _loginWithGoogle,
-              icon: const Icon(Icons.g_mobiledata_rounded, size: 34),
-              label: const Text('Đăng nhập bằng Google'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: CineVietColors.text,
-                side: const BorderSide(color: CineVietColors.border),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
+          const SizedBox(height: CineVietSpacing.sm),
+          const Text(
+            'Google Sign-In trên nhiều Android TV/TV Box không ổn định do thiếu Google Play Services. Dùng mã/QR sẽ đáng tin cậy hơn.',
+            style: TextStyle(color: CineVietColors.textSoft),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

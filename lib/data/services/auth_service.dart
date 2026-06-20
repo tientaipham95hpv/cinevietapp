@@ -1,6 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -15,7 +16,7 @@ const _mobileKey = 'cineviet-mobile-app-v1';
 const _googleServerClientId =
     // Web client ID used by GoogleSignIn to mint an ID token for backend exchange.
     // Keep this aligned with android/app/google-services.json and backend allowed audiences.
-    '186784861581-mc6buqlfpbrprko3iqfp6fi0biqc3o3s.apps.googleusercontent.com';
+    '186784861581-5l7skrrke87pmf669l6ach0brbra4v76.apps.googleusercontent.com';
 const _tokenKey = 'cineviet_access_token';
 const _refreshKey = 'cineviet_refresh_token';
 const _rememberLoginKey = 'cineviet_remember_login';
@@ -546,6 +547,25 @@ class AuthController extends StateNotifier<AuthState> {
       if (data is Map) {
         return '${data['error'] ?? data['message'] ?? 'Có lỗi xảy ra'}';
       }
+      if (e.response?.statusCode == 401) {
+        return 'Phiên đăng nhập không hợp lệ. Vui lòng thử lại.';
+      }
+    }
+    if (e is PlatformException) {
+      final code = e.code.toLowerCase();
+      if (code.contains('sign_in_canceled')) {
+        return 'Đã hủy đăng nhập Google.';
+      }
+      if (code.contains('network')) {
+        return 'Không kết nối được Google. Kiểm tra mạng rồi thử lại.';
+      }
+      if (code.contains('play_services') ||
+          code.contains('sign_in_failed') ||
+          code.contains('api_exception')) {
+        return 'Google Sign-In không khởi tạo được trên máy này. Cập nhật Google Play Services hoặc đăng nhập bằng email.';
+      }
+      final message = e.message?.trim();
+      if (message != null && message.isNotEmpty) return message;
     }
     return 'Có lỗi xảy ra. Vui lòng thử lại.';
   }
