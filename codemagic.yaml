@@ -11,7 +11,7 @@ workflows:
           flutter clean
           flutter pub get
       - name: Build mobile/tablet APKs by ABI
-        script: flutter build apk --release --flavor mobile --split-per-abi --dart-define=APP_VARIANT=mobile --build-name=1.0.6 --build-number=9074
+        script: flutter build apk --release --flavor mobile --target-platform android-arm,android-arm64 --split-per-abi --dart-define=APP_VARIANT=mobile --build-name=1.0.6 --build-number=9074
       - name: Build Android TV/TV box universal APK
         script: flutter build apk --release --flavor tv --dart-define=APP_VARIANT=tv --dart-define=APP_IS_TV=true --build-name=1.0.6 --build-number=9074
       - name: Collect APK artifacts
@@ -19,7 +19,6 @@ workflows:
           mkdir -p build/app/outputs/cineviet-release
           cp build/app/outputs/flutter-apk/app-arm64-v8a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-arm64-v8a-1.0.6+9074.apk
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-armeabi-v7a-1.0.6+9074.apk
-          cp build/app/outputs/flutter-apk/app-x86_64-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-x86_64-1.0.6+9074.apk
           cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-universal-1.0.6+9074.apk
     artifacts:
       - build/app/outputs/cineviet-release/*.apk
