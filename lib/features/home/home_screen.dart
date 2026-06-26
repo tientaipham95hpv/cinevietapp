@@ -14,22 +14,36 @@ import '../../data/models/watch_history.dart';
 import '../../data/repositories/movie_repository.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/cloud_history_service.dart';
+import '../../data/services/watch_history_service.dart';
 import '../player/resume_navigation.dart';
 
+const bool _isTvBuild = bool.fromEnvironment('APP_IS_TV');
+const int _tvHomeSectionLimit = 8;
+
 final cinemaMoviesProvider = FutureProvider<List<Movie>>(
-  (ref) => ref.watch(movieRepositoryProvider).cinema(limit: 14),
+  (ref) => ref
+      .watch(movieRepositoryProvider)
+      .cinema(limit: _isTvBuild ? _tvHomeSectionLimit : 14),
 );
 final seriesMoviesProvider = FutureProvider<List<Movie>>(
-  (ref) => ref.watch(movieRepositoryProvider).byType('series', limit: 14),
+  (ref) => ref
+      .watch(movieRepositoryProvider)
+      .byType('series', limit: _isTvBuild ? _tvHomeSectionLimit : 14),
 );
 final singleMoviesProvider = FutureProvider<List<Movie>>(
-  (ref) => ref.watch(movieRepositoryProvider).byType('movie', limit: 14),
+  (ref) => ref
+      .watch(movieRepositoryProvider)
+      .byType('movie', limit: _isTvBuild ? _tvHomeSectionLimit : 14),
 );
 final animeMoviesProvider = FutureProvider<List<Movie>>(
-  (ref) => ref.watch(movieRepositoryProvider).byType('anime', limit: 14),
+  (ref) => ref
+      .watch(movieRepositoryProvider)
+      .byType('anime', limit: _isTvBuild ? _tvHomeSectionLimit : 14),
 );
 final tvShowsMoviesProvider = FutureProvider<List<Movie>>(
-  (ref) => ref.watch(movieRepositoryProvider).byType('tvshows', limit: 14),
+  (ref) => ref
+      .watch(movieRepositoryProvider)
+      .byType('tvshows', limit: _isTvBuild ? _tvHomeSectionLimit : 14),
 );
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -42,14 +56,94 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
   final Set<String> _prefetchedPosters = <String>{};
+  ValueNotifier<int>? _searchFocusSignal;
+  FocusNode? _searchFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_keepHeroPinnedForSearchFocus);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextSignal = TvSearchFocus.searchFocusSignalOf(context);
+    final nextSearchNode = TvSearchFocus.maybeOf(context);
+    if (_searchFocusSignal != nextSignal) {
+      _searchFocusSignal?.removeListener(_forceTvHeroTop);
+      _searchFocusSignal = nextSignal;
+      _searchFocusSignal?.addListener(_forceTvHeroTop);
+    }
+    _searchFocusNode = nextSearchNode;
+  }
 
   @override
   void dispose() {
+    _searchFocusSignal?.removeListener(_forceTvHeroTop);
+    _scrollController.removeListener(_keepHeroPinnedForSearchFocus);
     _scrollController.dispose();
     super.dispose();
   }
 
+  void _keepHeroPinnedForSearchFocus() {
+    if (!_isTvBuild) return;
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (_searchFocusNode?.hasFocus == true &&
+        pos.pixels > pos.minScrollExtent + 1) {
+      _forceTvHeroTop();
+      return;
+    }
+
+    // Android TV focus scrolling can park Home halfway between the hero and
+    // first rail. When the user is moving back upward in that boundary area,
+    // always restore the hero to the top instead of leaving a half-visible
+    // "Phim nổi bật" header.
+    if (pos.userScrollDirection == ScrollDirection.forward &&
+        pos.pixels > pos.minScrollExtent + 1 &&
+        pos.pixels < _tvHeroSnapBoundary) {
+      _forceTvHeroTop();
+    }
+  }
+
+  double get _tvHeroSnapBoundary => 820;
+
+  void _forceTvHeroTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.jumpTo(_scrollController.position.minScrollExtent);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.minScrollExtent);
+    });
+    Future<void>.delayed(const Duration(milliseconds: 80), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.minScrollExtent);
+    });
+    Future<void>.delayed(const Duration(milliseconds: 180), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.jumpTo(_scrollController.position.minScrollExtent);
+    });
+  }
+
+  bool _snapTvHeroIfPartial(double heroHeight) {
+    if (!_isTvBuild || !_scrollController.hasClients) return false;
+    final pos = _scrollController.position;
+    if (pos.pixels <= pos.minScrollExtent + 1) return false;
+    // On Android TV, D-pad focus/scroll can leave the viewport parked in the
+    // hero/first-rail boundary. Visually that makes "Phim nổi bật" show only
+    // the lower half when the user scrolls back up. If the scroll rests above
+    // the first full rail, normalize it all the way back to the hero top.
+    final firstRailBoundary = heroHeight + 260;
+    if (pos.pixels < firstRailBoundary) {
+      _forceTvHeroTop();
+      return true;
+    }
+    return false;
+  }
+
   void _prefetchPosters(BuildContext context, Iterable<Movie> movies) {
+    if (PlatformDetector.of(context).isTv) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       for (final movie in movies) {
@@ -75,6 +169,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final anime = ref.watch(animeMoviesProvider);
     final tvShows = ref.watch(tvShowsMoviesProvider);
     final history = ref.watch(syncedWatchHistoryProvider);
+    final localHistory = ref.watch(watchHistoryProvider);
+    final heroFocusNode = platform.isTv ? TvSearchFocus.heroOf(context) : null;
 
     final featuredMovies = featured.maybeWhen(
       data: (v) => v,
@@ -89,6 +185,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ...latestMovies.take(8),
     ]);
 
+    final continueWatchingItems = _continueWatchingItems(history, localHistory);
+
     final contentPadding = platform.isMobile
         ? CineVietSpacing.md
         : CineVietSpacing.xl;
@@ -101,7 +199,110 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ? 520.0
         : platform.isTablet
         ? 560.0
+        : platform.isTv
+        ? (MediaQuery.sizeOf(context).height * 0.48).clamp(320.0, 420.0)
         : 640.0;
+
+    if (platform.isTv) {
+      // TV home uses a split layout: the hero is fixed, only the rails below
+      // scroll. This removes the bad intermediate state where the vertical
+      // scroll position can stop halfway through the hero and show "Phim nổi
+      // bật" clipped after moving down then back up with a remote.
+      return Column(
+        children: [
+          SizedBox(
+            height: heroHeight,
+            child: _FeaturedHeroCarousel(
+              data: featured,
+              fallback: latestMovies,
+              height: heroHeight,
+              platform: platform,
+              onHeroFocusChanged: (focused) {
+                if (focused) _forceTvHeroTop();
+              },
+            ),
+          ),
+          Expanded(
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    contentPadding,
+                    CineVietSpacing.lg,
+                    contentPadding,
+                    CineVietSpacing.xl,
+                  ),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      if (auth.loggedIn ||
+                          continueWatchingItems.isNotEmpty) ...[
+                        _ContinueWatchingSection(
+                          items: continueWatchingItems,
+                          platform: platform,
+                          cardWidth: cardWidth,
+                        ),
+                        const SizedBox(height: CineVietSpacing.xl),
+                      ],
+                      _HomeMovieSection(
+                        title: 'Phim nổi bật',
+                        icon: Icons.star_rounded,
+                        data: featured,
+                        fallbackMovies: latestMovies,
+                        cardWidth: cardWidth,
+                        skipFirstMovie: true,
+                        upFocusNode: heroFocusNode,
+                        onRequestHeroFocus: () {
+                          _forceTvHeroTop();
+                        },
+                      ),
+                      _HomeMovieSection(
+                        title: 'Phim mới cập nhật',
+                        icon: Icons.new_releases_rounded,
+                        data: latest,
+                        cardWidth: cardWidth,
+                      ),
+                      _HomeMovieSection(
+                        title: 'Phim chiếu rạp',
+                        icon: Icons.theaters_rounded,
+                        data: cinema,
+                        cardWidth: cardWidth,
+                      ),
+                      _HomeMovieSection(
+                        title: 'Phim bộ',
+                        icon: Icons.video_library_rounded,
+                        data: series,
+                        cardWidth: cardWidth,
+                      ),
+                      _HomeMovieSection(
+                        title: 'Phim lẻ',
+                        icon: Icons.movie_creation_rounded,
+                        data: single,
+                        cardWidth: cardWidth,
+                      ),
+                      _HomeMovieSection(
+                        title: 'Anime',
+                        icon: Icons.auto_awesome_rounded,
+                        data: anime,
+                        cardWidth: cardWidth,
+                      ),
+                      _HomeMovieSection(
+                        title: 'TV Shows',
+                        icon: Icons.live_tv_rounded,
+                        data: tvShows,
+                        cardWidth: cardWidth,
+                      ),
+                      const SizedBox(height: 96),
+                    ]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
 
     return RefreshIndicator(
       onRefresh: () async {
@@ -123,77 +324,100 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ref.read(tvShowsMoviesProvider.future),
         ]);
       },
-      child: CustomScrollView(
-        controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(),
-        scrollCacheExtent: const ScrollCacheExtent.pixels(2500),
-        slivers: [
-          SliverToBoxAdapter(
-            child: _FeaturedHeroCarousel(
-              data: featured,
-              fallback: latestMovies,
-              height: heroHeight,
-              platform: platform,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (!platform.isTv) return false;
+          if (notification is ScrollEndNotification) {
+            return _snapTvHeroIfPartial(heroHeight);
+          }
+          if (notification is UserScrollNotification &&
+              notification.direction == ScrollDirection.idle) {
+            return _snapTvHeroIfPartial(heroHeight);
+          }
+          return false;
+        },
+        child: CustomScrollView(
+          controller: _scrollController,
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: _FeaturedHeroCarousel(
+                data: featured,
+                fallback: latestMovies,
+                height: heroHeight,
+                platform: platform,
+                onHeroFocusChanged: platform.isTv
+                    ? (focused) {
+                        if (focused) _forceTvHeroTop();
+                      }
+                    : null,
+              ),
             ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              contentPadding,
-              CineVietSpacing.lg,
-              contentPadding,
-              CineVietSpacing.xl,
-            ),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                if (auth.loggedIn) ...[
-                  _ContinueWatchingSection(
-                    data: history,
-                    platform: platform,
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                contentPadding,
+                CineVietSpacing.lg,
+                contentPadding,
+                CineVietSpacing.xl,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  if (auth.loggedIn || continueWatchingItems.isNotEmpty) ...[
+                    _ContinueWatchingSection(
+                      items: continueWatchingItems,
+                      platform: platform,
+                      cardWidth: cardWidth,
+                    ),
+                    const SizedBox(height: CineVietSpacing.xl),
+                  ],
+                  _HomeMovieSection(
+                    title: 'Phim mới cập nhật',
+                    icon: Icons.new_releases_rounded,
+                    data: latest,
+                    cardWidth: cardWidth,
+                    upFocusNode: heroFocusNode,
+                    onRequestHeroFocus: platform.isTv
+                        ? () {
+                            _forceTvHeroTop();
+                          }
+                        : null,
+                  ),
+                  _HomeMovieSection(
+                    title: 'Phim chiếu rạp',
+                    icon: Icons.theaters_rounded,
+                    data: cinema,
                     cardWidth: cardWidth,
                   ),
-                  const SizedBox(height: CineVietSpacing.xl),
-                ],
-                _HomeMovieSection(
-                  title: 'Phim mới cập nhật',
-                  icon: Icons.new_releases_rounded,
-                  data: latest,
-                  cardWidth: cardWidth,
-                ),
-                _HomeMovieSection(
-                  title: 'Phim chiếu rạp',
-                  icon: Icons.theaters_rounded,
-                  data: cinema,
-                  cardWidth: cardWidth,
-                ),
-                _HomeMovieSection(
-                  title: 'Phim bộ',
-                  icon: Icons.video_library_rounded,
-                  data: series,
-                  cardWidth: cardWidth,
-                ),
-                _HomeMovieSection(
-                  title: 'Phim lẻ',
-                  icon: Icons.movie_creation_rounded,
-                  data: single,
-                  cardWidth: cardWidth,
-                ),
-                _HomeMovieSection(
-                  title: 'Anime',
-                  icon: Icons.auto_awesome_rounded,
-                  data: anime,
-                  cardWidth: cardWidth,
-                ),
-                _HomeMovieSection(
-                  title: 'TV Shows',
-                  icon: Icons.live_tv_rounded,
-                  data: tvShows,
-                  cardWidth: cardWidth,
-                ),
-                const SizedBox(height: 96),
-              ]),
+                  _HomeMovieSection(
+                    title: 'Phim bộ',
+                    icon: Icons.video_library_rounded,
+                    data: series,
+                    cardWidth: cardWidth,
+                  ),
+                  _HomeMovieSection(
+                    title: 'Phim lẻ',
+                    icon: Icons.movie_creation_rounded,
+                    data: single,
+                    cardWidth: cardWidth,
+                  ),
+                  _HomeMovieSection(
+                    title: 'Anime',
+                    icon: Icons.auto_awesome_rounded,
+                    data: anime,
+                    cardWidth: cardWidth,
+                  ),
+                  _HomeMovieSection(
+                    title: 'TV Shows',
+                    icon: Icons.live_tv_rounded,
+                    data: tvShows,
+                    cardWidth: cardWidth,
+                  ),
+                  const SizedBox(height: 96),
+                ]),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -205,11 +429,13 @@ class _FeaturedHeroCarousel extends ConsumerStatefulWidget {
     required this.fallback,
     required this.height,
     required this.platform,
+    this.onHeroFocusChanged,
   });
   final AsyncValue<List<Movie>> data;
   final List<Movie> fallback;
   final double height;
   final PlatformInfo platform;
+  final ValueChanged<bool>? onHeroFocusChanged;
 
   @override
   ConsumerState<_FeaturedHeroCarousel> createState() =>
@@ -224,13 +450,18 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
   @override
   void initState() {
     super.initState();
-    _armTimer();
+    if (!widget.platform.isTv) _armTimer();
   }
 
   @override
   void didUpdateWidget(covariant _FeaturedHeroCarousel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _armTimer();
+    if (widget.platform.isTv) {
+      _timer?.cancel();
+      if (_index >= _items.length) _index = 0;
+    } else {
+      _armTimer();
+    }
   }
 
   @override
@@ -254,7 +485,11 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
       orElse: () => const <Movie>[],
     );
     final source = movies.isNotEmpty ? movies : widget.fallback;
-    return source.take(10).toList();
+    final preferred = widget.platform.isTv
+        ? source.where((movie) => movie.landscapeImageUrl != null).toList()
+        : source;
+    final items = preferred.isNotEmpty ? preferred : source;
+    return items.take(widget.platform.isTv ? 8 : 10).toList();
   }
 
   void _go(int next) {
@@ -262,6 +497,10 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
     if (items.isEmpty) return;
     setState(() => _index = (next + items.length) % items.length);
     _armTimer();
+  }
+
+  void _focusFirstRail() {
+    FocusScope.of(context).focusInDirection(TraversalDirection.down);
   }
 
   @override
@@ -308,8 +547,13 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                     if (image != null)
                       CachedNetworkImage(
                         imageUrl: image,
-                        fit: BoxFit.cover,
-                        alignment: widget.platform.isMobile
+                        fit: widget.platform.isTv
+                            ? BoxFit.contain
+                            : BoxFit.cover,
+                        memCacheWidth: widget.platform.isTv ? 960 : null,
+                        maxWidthDiskCache: widget.platform.isTv ? 960 : null,
+                        alignment:
+                            (widget.platform.isMobile || widget.platform.isTv)
                             ? Alignment.topCenter
                             : Alignment.center,
                         placeholder: (context, url) =>
@@ -375,7 +619,11 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                   alignment: Alignment.bottomLeft,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: widget.platform.isMobile ? 390 : 760,
+                      maxWidth: widget.platform.isMobile
+                          ? 390
+                          : widget.platform.isTv
+                          ? 680
+                          : 760,
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -398,7 +646,7 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: widget.platform.isTv
-                                ? 48
+                                ? 46
                                 : widget.platform.isMobile
                                 ? 32
                                 : 42,
@@ -423,6 +671,10 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                           movie: movie,
                           label: 'Xem ngay',
                           icon: Icons.play_arrow_rounded,
+                          onFocusChanged: widget.onHeroFocusChanged,
+                          onArrowDown: widget.platform.isTv
+                              ? _focusFirstRail
+                              : null,
                         ),
                       ],
                     ),
@@ -430,7 +682,7 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                 ),
               ),
             ),
-            if (items.length > 1) ...[
+            if (items.length > 1)
               Positioned(
                 right: widget.platform.isMobile
                     ? CineVietSpacing.md
@@ -454,7 +706,6 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                   ),
                 ),
               ),
-            ],
           ],
         ),
       ),
@@ -509,10 +760,14 @@ class _HeroButton extends ConsumerWidget {
     required this.movie,
     required this.label,
     required this.icon,
+    this.onFocusChanged,
+    this.onArrowDown,
   });
   final Movie movie;
   final String label;
   final IconData icon;
+  final ValueChanged<bool>? onFocusChanged;
+  final VoidCallback? onArrowDown;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -527,13 +782,21 @@ class _HeroButton extends ConsumerWidget {
         onTap: open,
         borderRadius: BorderRadius.circular(CineVietRadius.full),
         padding: EdgeInsets.zero,
-        ensureVisibleAlignment: 0.18,
+        ensureVisibleAlignment: 0.0,
+        autoEnsureVisible: false,
+        onFocusChanged: onFocusChanged,
         onKeyEvent: (_, event) {
-          if (event is KeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.arrowUp &&
-              searchNode != null) {
-            searchNode.requestFocus();
-            return KeyEventResult.handled;
+          if (event is KeyDownEvent) {
+            if (event.logicalKey == LogicalKeyboardKey.arrowUp &&
+                searchNode != null) {
+              searchNode.requestFocus();
+              return KeyEventResult.handled;
+            }
+            if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+                onArrowDown != null) {
+              onArrowDown!.call();
+              return KeyEventResult.handled;
+            }
           }
           return KeyEventResult.ignored;
         },
@@ -592,11 +855,19 @@ class _HomeMovieSection extends StatelessWidget {
     required this.icon,
     required this.data,
     required this.cardWidth,
+    this.fallbackMovies = const <Movie>[],
+    this.skipFirstMovie = false,
+    this.upFocusNode,
+    this.onRequestHeroFocus,
   });
   final String title;
   final IconData icon;
   final AsyncValue<List<Movie>> data;
   final double cardWidth;
+  final List<Movie> fallbackMovies;
+  final bool skipFirstMovie;
+  final FocusNode? upFocusNode;
+  final VoidCallback? onRequestHeroFocus;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -606,7 +877,14 @@ class _HomeMovieSection extends StatelessWidget {
       children: [
         _SectionHeader(title: title, icon: icon),
         const SizedBox(height: CineVietSpacing.md),
-        _MovieAsyncRail(data: data, cardWidth: cardWidth),
+        _MovieAsyncRail(
+          data: data,
+          cardWidth: cardWidth,
+          fallbackMovies: fallbackMovies,
+          skipFirstMovie: skipFirstMovie,
+          upFocusNode: upFocusNode,
+          onRequestHeroFocus: onRequestHeroFocus,
+        ),
       ],
     ),
   );
@@ -646,9 +924,20 @@ class _SectionHeader extends StatelessWidget {
 }
 
 class _MovieAsyncRail extends StatelessWidget {
-  const _MovieAsyncRail({required this.data, required this.cardWidth});
+  const _MovieAsyncRail({
+    required this.data,
+    required this.cardWidth,
+    this.fallbackMovies = const <Movie>[],
+    this.skipFirstMovie = false,
+    this.upFocusNode,
+    this.onRequestHeroFocus,
+  });
   final AsyncValue<List<Movie>> data;
   final double cardWidth;
+  final List<Movie> fallbackMovies;
+  final bool skipFirstMovie;
+  final FocusNode? upFocusNode;
+  final VoidCallback? onRequestHeroFocus;
 
   @override
   Widget build(BuildContext context) => data.when(
@@ -662,10 +951,29 @@ class _MovieAsyncRail extends StatelessWidget {
         itemBuilder: (context, index) => _SkeletonCard(width: cardWidth),
       ),
     ),
-    error: (error, stackTrace) => _RailError(error: error),
-    data: (movies) =>
-        _MovieRail(movies: movies.take(14).toList(), cardWidth: cardWidth),
+    error: (error, stackTrace) => fallbackMovies.isNotEmpty
+        ? _MovieRail(
+            movies: _railMovies(fallbackMovies),
+            cardWidth: cardWidth,
+            upFocusNode: upFocusNode,
+            onRequestHeroFocus: onRequestHeroFocus,
+          )
+        : _RailError(error: error),
+    data: (movies) {
+      final source = movies.isNotEmpty ? movies : fallbackMovies;
+      return _MovieRail(
+        movies: _railMovies(source),
+        cardWidth: cardWidth,
+        upFocusNode: upFocusNode,
+        onRequestHeroFocus: onRequestHeroFocus,
+      );
+    },
   );
+
+  List<Movie> _railMovies(List<Movie> source) {
+    final items = skipFirstMovie && source.length > 1 ? source.skip(1) : source;
+    return items.take(_isTvBuild ? _tvHomeSectionLimit : 14).toList();
+  }
 }
 
 class _RailError extends StatelessWidget {
@@ -688,9 +996,16 @@ class _RailError extends StatelessWidget {
 }
 
 class _MovieRail extends StatelessWidget {
-  const _MovieRail({required this.movies, required this.cardWidth});
+  const _MovieRail({
+    required this.movies,
+    required this.cardWidth,
+    this.upFocusNode,
+    this.onRequestHeroFocus,
+  });
   final List<Movie> movies;
   final double cardWidth;
+  final FocusNode? upFocusNode;
+  final VoidCallback? onRequestHeroFocus;
 
   @override
   Widget build(BuildContext context) {
@@ -707,150 +1022,192 @@ class _MovieRail extends StatelessWidget {
         itemCount: movies.length,
         separatorBuilder: (context, index) =>
             const SizedBox(width: CineVietSpacing.md),
-        itemBuilder: (context, index) =>
-            _RealMovieCard(movie: movies[index], width: cardWidth),
+        itemBuilder: (context, index) => _RealMovieCard(
+          movie: movies[index],
+          width: cardWidth,
+          upFocusNode: upFocusNode,
+          onRequestHeroFocus: onRequestHeroFocus,
+        ),
       ),
     );
   }
 }
 
 class _RealMovieCard extends ConsumerWidget {
-  const _RealMovieCard({required this.movie, required this.width});
+  const _RealMovieCard({
+    required this.movie,
+    required this.width,
+    this.upFocusNode,
+    this.onRequestHeroFocus,
+  });
   final Movie movie;
   final double width;
+  final FocusNode? upFocusNode;
+  final VoidCallback? onRequestHeroFocus;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => TvFocus(
-    onTap: () => openMovieOrResume(context, ref, movie),
-    borderRadius: BorderRadius.circular(CineVietRadius.xl),
-    padding: const EdgeInsets.all(CineVietSpacing.xs),
-    scale: 1.025,
-    builder: (context, focused, child) => SizedBox(
-      width: width + CineVietSpacing.sm,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: focused ? CineVietColors.cardHover : Colors.transparent,
-          borderRadius: BorderRadius.circular(CineVietRadius.xl),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final platform = PlatformDetector.of(context);
+    return TvFocus(
+      onTap: () => openMovieOrResume(context, ref, movie),
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.arrowUp &&
+            upFocusNode != null) {
+          onRequestHeroFocus?.call();
+          upFocusNode!.requestFocus();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      borderRadius: BorderRadius.circular(CineVietRadius.xl),
+      padding: const EdgeInsets.all(CineVietSpacing.xs),
+      scale: 1.025,
+      ensureParentScrollable: false,
+      builder: (context, focused, child) => SizedBox(
+        width: width + CineVietSpacing.sm,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: focused ? CineVietColors.cardHover : Colors.transparent,
+            borderRadius: BorderRadius.circular(CineVietRadius.xl),
+          ),
+          child: child,
         ),
-        child: child,
       ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: width,
-          height: width * 1.5,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(CineVietRadius.lg),
-              border: Border.all(color: CineVietColors.border),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.32),
-                  blurRadius: 18,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (movie.posterUrl != null)
-                  CachedNetworkImage(
-                    imageUrl: movie.posterUrl!,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) =>
-                        const ColoredBox(color: CineVietColors.bg3),
-                    errorWidget: (context, url, error) => const Icon(
-                      Icons.local_movies_rounded,
-                      color: CineVietColors.accent,
-                    ),
-                  )
-                else
-                  const ColoredBox(
-                    color: CineVietColors.bg3,
-                    child: Icon(
-                      Icons.local_movies_rounded,
-                      color: CineVietColors.accent,
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: width,
+            height: width * 1.5,
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(CineVietRadius.lg),
+                border: Border.all(color: CineVietColors.border),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.32),
+                    blurRadius: 18,
+                    offset: const Offset(0, 10),
                   ),
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.74),
-                        ],
-                        stops: const [0.56, 1],
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (movie.posterUrl != null)
+                    CachedNetworkImage(
+                      imageUrl: movie.posterUrl!,
+                      fit: BoxFit.cover,
+                      memCacheWidth: platform.isTv ? 260 : null,
+                      maxWidthDiskCache: platform.isTv ? 320 : null,
+                      placeholder: (context, url) =>
+                          const ColoredBox(color: CineVietColors.bg3),
+                      errorWidget: (context, url, error) => const Icon(
+                        Icons.local_movies_rounded,
+                        color: CineVietColors.accent,
+                      ),
+                    )
+                  else
+                    const ColoredBox(
+                      color: CineVietColors.bg3,
+                      child: Icon(
+                        Icons.local_movies_rounded,
+                        color: CineVietColors.accent,
+                      ),
+                    ),
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.74),
+                          ],
+                          stops: const [0.56, 1],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  top: CineVietSpacing.sm,
-                  right: CineVietSpacing.sm,
-                  child: _Badge(
-                    text: movie.quality?.isNotEmpty == true
-                        ? movie.quality!
-                        : 'HD',
-                  ),
-                ),
-                if ((movie.language ?? '').isNotEmpty)
                   Positioned(
-                    left: CineVietSpacing.sm,
-                    bottom: CineVietSpacing.sm,
-                    child: _Badge(text: _compactLanguage(movie.language!)),
+                    top: CineVietSpacing.sm,
+                    right: CineVietSpacing.sm,
+                    child: _Badge(
+                      text: movie.quality?.isNotEmpty == true
+                          ? movie.quality!
+                          : 'HD',
+                    ),
                   ),
-              ],
+                  if ((movie.language ?? '').isNotEmpty)
+                    Positioned(
+                      left: CineVietSpacing.sm,
+                      bottom: CineVietSpacing.sm,
+                      child: _Badge(text: _compactLanguage(movie.language!)),
+                    ),
+                ],
+              ),
             ),
           ),
-        ),
-        SizedBox(
-          height: 92,
-          width: width,
-          child: Padding(
-            padding: const EdgeInsets.only(top: CineVietSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  movie.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(height: CineVietSpacing.xs),
-                Text(
-                  movie.englishTitleLine,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: CineVietColors.textSoft,
+          SizedBox(
+            height: 92,
+            width: width,
+            child: Padding(
+              padding: const EdgeInsets.only(top: CineVietSpacing.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    movie.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
-                ),
-                const SizedBox(height: CineVietSpacing.xs),
-                Text(
-                  movie.yearLine,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: CineVietColors.muted,
+                  const SizedBox(height: CineVietSpacing.xs),
+                  Text(
+                    movie.englishTitleLine,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: CineVietColors.textSoft,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: CineVietSpacing.xs),
+                  Text(
+                    movie.yearLine,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: CineVietColors.muted,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
-    ),
+        ],
+      ),
+    );
+  }
+}
+
+List<WatchHistoryItem> _continueWatchingItems(
+  AsyncValue<List<WatchHistoryItem>> synced,
+  AsyncValue<List<WatchHistoryItem>> local,
+) {
+  final syncedItems = synced.maybeWhen(
+    data: (items) => items,
+    orElse: () => const <WatchHistoryItem>[],
+  );
+  if (syncedItems.isNotEmpty) return syncedItems;
+  return local.maybeWhen(
+    data: (items) => items,
+    orElse: () => const <WatchHistoryItem>[],
   );
 }
 
@@ -870,50 +1227,46 @@ List<WatchHistoryItem> _latestEpisodePerMovie(List<WatchHistoryItem> items) {
 
 class _ContinueWatchingSection extends StatelessWidget {
   const _ContinueWatchingSection({
-    required this.data,
+    required this.items,
     required this.platform,
     required this.cardWidth,
   });
-  final AsyncValue<List<WatchHistoryItem>> data;
+  final List<WatchHistoryItem> items;
   final PlatformInfo platform;
   final double cardWidth;
 
   @override
-  Widget build(BuildContext context) => data.when(
-    loading: () => const SizedBox.shrink(),
-    error: (error, stackTrace) => const SizedBox.shrink(),
-    data: (items) {
-      final filtered =
-          items.where((e) => !e.completed && e.progress > 0.02).toList()
-            ..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
-      final displayItems = _latestEpisodePerMovie(filtered);
-      if (displayItems.isEmpty) return const SizedBox.shrink();
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _SectionHeader(
-            title: 'Xem tiếp',
-            icon: Icons.play_circle_outline_rounded,
-          ),
-          const SizedBox(height: CineVietSpacing.md),
-          SizedBox(
-            height: platform.isMobile ? 136 : 152,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: displayItems.length,
-              separatorBuilder: (context, index) =>
-                  const SizedBox(width: CineVietSpacing.md),
-              itemBuilder: (context, index) => _ContinueCard(
-                key: ValueKey(displayItems[index].key),
-                item: displayItems[index],
-                width: platform.isMobile ? 260 : 330,
-              ),
+  Widget build(BuildContext context) {
+    final filtered =
+        items.where((e) => !e.completed && e.progress > 0.02).toList()
+          ..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
+    final displayItems = _latestEpisodePerMovie(filtered);
+    if (displayItems.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeader(
+          title: 'Xem tiếp',
+          icon: Icons.play_circle_outline_rounded,
+        ),
+        const SizedBox(height: CineVietSpacing.md),
+        SizedBox(
+          height: platform.isMobile ? 136 : 152,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: displayItems.length,
+            separatorBuilder: (context, index) =>
+                const SizedBox(width: CineVietSpacing.md),
+            itemBuilder: (context, index) => _ContinueCard(
+              key: ValueKey(displayItems[index].key),
+              item: displayItems[index],
+              width: platform.isMobile ? 260 : 330,
             ),
           ),
-        ],
-      );
-    },
-  );
+        ),
+      ],
+    );
+  }
 }
 
 class _ContinueCard extends ConsumerStatefulWidget {
@@ -950,113 +1303,121 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
   Future<void> _openResume() => openWatchHistoryItem(context, widget.item);
 
   @override
-  Widget build(BuildContext context) => TvFocus(
-    onTap: _openResume,
-    borderRadius: BorderRadius.circular(CineVietRadius.lg),
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
+  Widget build(BuildContext context) {
+    final platform = PlatformDetector.of(context);
+    return TvFocus(
       onTap: _openResume,
-      child: Container(
-        width: widget.width,
-        padding: const EdgeInsets.all(CineVietSpacing.sm),
-        decoration: BoxDecoration(
-          color: CineVietColors.card,
-          borderRadius: BorderRadius.circular(CineVietRadius.lg),
-          border: Border.all(color: CineVietColors.border),
-        ),
-        child: Stack(
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 96,
-                  height: double.infinity,
-                  clipBehavior: Clip.antiAlias,
-                  decoration: BoxDecoration(
-                    color: CineVietColors.bg3,
-                    borderRadius: BorderRadius.circular(CineVietRadius.md),
+      borderRadius: BorderRadius.circular(CineVietRadius.lg),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _openResume,
+        child: Container(
+          width: widget.width,
+          padding: const EdgeInsets.all(CineVietSpacing.sm),
+          decoration: BoxDecoration(
+            color: CineVietColors.card,
+            borderRadius: BorderRadius.circular(CineVietRadius.lg),
+            border: Border.all(color: CineVietColors.border),
+          ),
+          child: Stack(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 96,
+                    height: double.infinity,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: CineVietColors.bg3,
+                      borderRadius: BorderRadius.circular(CineVietRadius.md),
+                    ),
+                    child:
+                        (widget.item.backdropUrl?.isNotEmpty == true ||
+                            widget.item.posterUrl?.isNotEmpty == true)
+                        ? CachedNetworkImage(
+                            imageUrl:
+                                widget.item.backdropUrl?.isNotEmpty == true
+                                ? widget.item.backdropUrl!
+                                : widget.item.posterUrl!,
+                            fit: BoxFit.cover,
+                            memCacheWidth: platform.isTv ? 220 : null,
+                            maxWidthDiskCache: platform.isTv ? 280 : null,
+                          )
+                        : const Icon(
+                            Icons.movie_rounded,
+                            color: CineVietColors.accent,
+                          ),
                   ),
-                  child:
-                      (widget.item.backdropUrl?.isNotEmpty == true ||
-                          widget.item.posterUrl?.isNotEmpty == true)
-                      ? CachedNetworkImage(
-                          imageUrl: widget.item.backdropUrl?.isNotEmpty == true
-                              ? widget.item.backdropUrl!
-                              : widget.item.posterUrl!,
-                          fit: BoxFit.cover,
-                        )
-                      : const Icon(
-                          Icons.movie_rounded,
+                  const SizedBox(width: CineVietSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          widget.item.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: CineVietSpacing.xs),
+                        Text(
+                          '${widget.item.episodeName} • ${(widget.item.progress * 100).round()}%',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: CineVietColors.textSoft,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: CineVietSpacing.sm),
+                        LinearProgressIndicator(
+                          value: widget.item.progress,
+                          backgroundColor: CineVietColors.border,
                           color: CineVietColors.accent,
                         ),
-                ),
-                const SizedBox(width: CineVietSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        widget.item.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w900),
-                      ),
-                      const SizedBox(height: CineVietSpacing.xs),
-                      Text(
-                        '${widget.item.episodeName} • ${(widget.item.progress * 100).round()}%',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: CineVietColors.textSoft,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(height: CineVietSpacing.sm),
-                      LinearProgressIndicator(
-                        value: widget.item.progress,
-                        backgroundColor: CineVietColors.border,
-                        color: CineVietColors.accent,
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Tooltip(
-                message: 'Xóa khỏi Xem tiếp',
-                child: Material(
-                  color: Colors.black.withValues(alpha: 0.62),
-                  shape: const CircleBorder(),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: _removing ? null : _remove,
-                    child: SizedBox(
-                      width: 34,
-                      height: 34,
-                      child: _removing
-                          ? const Padding(
-                              padding: EdgeInsets.all(9),
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(
-                              Icons.close_rounded,
-                              size: 20,
-                              color: Colors.white,
-                            ),
+                ],
+              ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Tooltip(
+                  message: 'Xóa khỏi Xem tiếp',
+                  child: Material(
+                    color: Colors.black.withValues(alpha: 0.62),
+                    shape: const CircleBorder(),
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: _removing ? null : _remove,
+                      child: SizedBox(
+                        width: 34,
+                        height: 34,
+                        child: _removing
+                            ? const Padding(
+                                padding: EdgeInsets.all(9),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.close_rounded,
+                                size: 20,
+                                color: Colors.white,
+                              ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _SkeletonCard extends StatelessWidget {

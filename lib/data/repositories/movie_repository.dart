@@ -9,21 +9,25 @@ final movieRepositoryProvider = Provider<MovieRepository>(
   (ref) => MovieRepository(ref.watch(cineVietApiProvider)),
 );
 final latestMoviesProvider = FutureProvider<List<Movie>>(
-  (ref) => ref.watch(movieRepositoryProvider).latest(limit: 18),
+  (ref) =>
+      ref.watch(movieRepositoryProvider).latest(limit: _isTvBuild ? 12 : 18),
 );
 final featuredMoviesProvider = FutureProvider<List<Movie>>(
-  (ref) => ref.watch(movieRepositoryProvider).featured(limit: 10),
+  (ref) =>
+      ref.watch(movieRepositoryProvider).featured(limit: _isTvBuild ? 6 : 10),
 );
+const bool _isTvBuild = bool.fromEnvironment('APP_IS_TV');
 final movieDetailProvider = FutureProvider.family<Movie, String>(
   (ref, idOrSlug) => ref.watch(movieRepositoryProvider).detail(idOrSlug),
 );
-final browseMoviesProvider = FutureProvider.autoDispose.family<MoviePage, BrowseQuery>(
-  (ref, query) {
-    final cancelToken = CancelToken();
-    ref.onDispose(() => cancelToken.cancel());
-    return ref.watch(movieRepositoryProvider).browse(query, cancelToken: cancelToken);
-  },
-);
+final browseMoviesProvider = FutureProvider.autoDispose
+    .family<MoviePage, BrowseQuery>((ref, query) {
+      final cancelToken = CancelToken();
+      ref.onDispose(() => cancelToken.cancel());
+      return ref
+          .watch(movieRepositoryProvider)
+          .browse(query, cancelToken: cancelToken);
+    });
 
 class MovieRepository {
   MovieRepository(this.api);
@@ -80,10 +84,15 @@ class MovieRepository {
         .toList();
   }
 
-  Future<MoviePage> browse(BrowseQuery query, {int limit = 24, CancelToken? cancelToken}) async {
+  Future<MoviePage> browse(
+    BrowseQuery query, {
+    int? limit,
+    CancelToken? cancelToken,
+  }) async {
+    final effectiveLimit = limit ?? (_isTvBuild ? 12 : 24);
     final params = <String, dynamic>{
       'page': query.page,
-      'limit': limit,
+      'limit': effectiveLimit,
       'sort': query.sort,
       'order': 'desc',
     };

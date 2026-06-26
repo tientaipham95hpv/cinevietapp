@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
@@ -42,7 +43,8 @@ class CineVietPlayerScreen extends ConsumerStatefulWidget {
       _CineVietPlayerScreenState();
 }
 
-class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
+class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
+    with WidgetsBindingObserver {
   VideoPlayerController? _controller;
   bool _showControls = true;
   bool _loading = true;
@@ -63,6 +65,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   Timer? _gestureHintTimer;
   Timer? _hideTimer;
   Timer? _progressTimer;
+  Timer? _videoOutputWatchdogTimer;
   Timer? _seekHintTimer;
   Timer? _levelApplyTimer;
   double? _pendingBrightness;
@@ -88,6 +91,21 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   static const String _autoNextPrefKey = 'player_auto_next_episode';
   List<String> _activeCandidateUrls = const [];
   int _activeCandidateIndex = 0;
+
+  VideoPlayerController _createVideoController(String streamUrl) {
+    // Android texture rendering is fragile on some TV boxes/tablets: ExoPlayer
+    // can keep audio playing while Flutter's texture stays blank. PlatformView
+    // uses the native video surface and is more reliable for these devices.
+    // ignore: deprecated_member_use
+    return VideoPlayerController.network(
+      streamUrl,
+      formatHint: VideoFormat.hls,
+      httpHeaders: _headersForStreamUrl(streamUrl),
+      viewType: Platform.isAndroid
+          ? VideoViewType.platformView
+          : VideoViewType.textureView,
+    );
+  }
   WebViewController? _embedController;
   double? _scrubProgress;
   final FocusNode _progressFocusNode = FocusNode(debugLabel: 'PlayerProgress');
@@ -120,7 +138,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     return episode.linkEmbed?.trim() ?? '';
   }
 
-  bool get _supportsEmbedFallback => Platform.isAndroid || Platform.isIOS;
+  bool get _supportsEmbedFallback =>
+      !_isAndroidTvBuild && (Platform.isAndroid || Platform.isIOS);
 
   String _embedUrlOf(EpisodeItem episode) {
     return (episode.linkEmbed ?? '').trim();
@@ -641,6 +660,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(WakelockPlus.enable());
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -658,6 +679,18 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     unawaited(_loadSelectedSubtitle());
     unawaited(_loadAutoNextPref());
     _initPlayer();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      try {
+        _controller?.pause();
+      } catch (_) {}
+      unawaited(_saveProgress());
+    }
   }
 
   Future<void> _loadAutoNextPref() async {
@@ -782,12 +815,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       final streamUrl = candidateUrls[i];
       _activeCandidateIndex = i;
       try {
-        // ignore: deprecated_member_use
-        final nextController = VideoPlayerController.network(
-          streamUrl,
-          formatHint: VideoFormat.hls,
-          httpHeaders: _headersForStreamUrl(streamUrl),
-        );
+        final nextController = _createVideoController(streamUrl);
         _controller = nextController;
         nextController.addListener(_syncPlayerState);
         await nextController.initialize().timeout(
@@ -871,6 +899,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     }
 
     _startProgressTimer();
+    _startVideoOutputWatchdog();
     _armHideTimer();
   }
 
@@ -878,20 +907,28 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
   void dispose() {
     _hideTimer?.cancel();
     _progressTimer?.cancel();
+    _videoOutputWatchdogTimer?.cancel();
     _seekHintTimer?.cancel();
     _gestureHintTimer?.cancel();
     _levelApplyTimer?.cancel();
-    _watchChatController.dispose();
-    _progressFocusNode.dispose();
-    _playControlFocusNode.dispose();
     _saveProgress();
     if (_isWatchTogether && _isWatchHost) {
       WatchTogetherService.closeActiveRoom(forceDelete: true);
     }
     HardwareKeyboard.instance.removeHandler(_handleRemoteKey);
-    _controller?.removeListener(_syncPlayerState);
-    _controller?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    final controller = _controller;
+    _controller = null;
+    if (controller != null) {
+      try {
+        controller.removeListener(_syncPlayerState);
+        unawaited(controller.pause());
+        unawaited(controller.setVolume(0));
+        unawaited(controller.dispose());
+      } catch (_) {}
+    }
     _embedController = null;
+    unawaited(WakelockPlus.disable());
     unawaited(_resetScreenBrightness());
     if (!_switchingEpisode) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -902,6 +939,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         DeviceOrientation.landscapeRight,
       ]);
     }
+    _watchChatController.dispose();
+    _progressFocusNode.dispose();
+    _playControlFocusNode.dispose();
     super.dispose();
   }
 
@@ -1009,7 +1049,9 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         lower.contains('exoplaybackexception') ||
         lower.contains('videoerror') ||
         lower.contains('source error') ||
-        lower.contains('behindlivewindow');
+        lower.contains('behindlivewindow') ||
+        lower.contains('blank video') ||
+        lower.contains('no video output');
   }
 
   Future<void> _tryNextCandidateAfterPlaybackError(String playbackError) async {
@@ -1020,10 +1062,18 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final nextIndex = _activeCandidateIndex + 1;
     if (nextIndex >= _activeCandidateUrls.length) {
       if (_activateEmbedFallback(reason: playbackError)) return;
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _buffering = false;
+          _error = _friendlyPlaybackError(playbackError);
+        });
+      }
       return;
     }
 
     _recoveringPlaybackError = true;
+    _videoOutputWatchdogTimer?.cancel();
     setState(() {
       _loading = true;
       _buffering = false;
@@ -1040,12 +1090,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     for (var i = nextIndex; i < _activeCandidateUrls.length; i++) {
       final streamUrl = _activeCandidateUrls[i];
       try {
-        // ignore: deprecated_member_use
-        final nextController = VideoPlayerController.network(
-          streamUrl,
-          formatHint: VideoFormat.hls,
-          httpHeaders: _headersForStreamUrl(streamUrl),
-        );
+        final nextController = _createVideoController(streamUrl);
         _controller = nextController;
         _activeCandidateIndex = i;
         nextController.addListener(_syncPlayerState);
@@ -1065,6 +1110,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
         try {
           await nextController.play();
         } catch (_) {}
+        _startVideoOutputWatchdog();
         _recoveringPlaybackError = false;
         return;
       } catch (e) {
@@ -1110,6 +1156,38 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
       });
     }
     _maybeAutoNextEpisode(value);
+  }
+
+  void _startVideoOutputWatchdog() {
+    if (!_isAndroidTvBuild) return;
+    _videoOutputWatchdogTimer?.cancel();
+    _videoOutputWatchdogTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      _checkVideoOutput();
+    });
+  }
+
+  void _checkVideoOutput() {
+    if (!mounted || _recoveringPlaybackError || _loading) return;
+    final controller = _controller;
+    if (controller == null) return;
+    final value = controller.value;
+    if (!value.isInitialized || value.hasError) return;
+    if (!value.isPlaying || value.position.inMilliseconds < 3000) return;
+
+    final size = value.size;
+    final hasVideoSize = size.width > 1 && size.height > 1;
+    final hasAspectRatio = value.aspectRatio.isFinite && value.aspectRatio > 0;
+    if (hasVideoSize && hasAspectRatio) {
+      _videoOutputWatchdogTimer?.cancel();
+      _videoOutputWatchdogTimer = null;
+      return;
+    }
+
+    unawaited(
+      _tryNextCandidateAfterPlaybackError(
+        'blank video output: size=${size.width}x${size.height}',
+      ),
+    );
   }
 
   // Auto-advance to the next episode when the current one is (almost) finished.
@@ -1394,10 +1472,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     try {
       final controller = _controller;
       if (controller == null || !controller.value.isInitialized) return;
-      final duration = controller.value.duration;
+      var duration = controller.value.duration;
       final position = controller.value.position;
-      if (duration.inMilliseconds <= 0 || position.inMilliseconds < 3000) {
-        return;
+      if (position.inMilliseconds < 3000) return;
+      if (duration.inMilliseconds <= 0) {
+        duration = position + const Duration(hours: 1);
       }
       final item = WatchHistoryItem.fromPlayback(
         movie: widget.movie,
@@ -1835,23 +1914,38 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen> {
     final aspectRatio = controller.value.aspectRatio == 0
         ? 16 / 9
         : controller.value.aspectRatio;
-    final fit = switch (_fitMode) {
-      _PlayerFitMode.contain => BoxFit.contain,
-      _PlayerFitMode.cover => BoxFit.cover,
-      _PlayerFitMode.stretch => BoxFit.fill,
-    };
     return SizedBox.expand(
       child: Stack(
         fit: StackFit.expand,
         children: [
-          FittedBox(
-            fit: fit,
-            alignment: Alignment.center,
-            child: SizedBox(
-              width: aspectRatio * 1000,
-              height: 1000,
-              child: VideoPlayer(controller),
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final maxWidth = constraints.maxWidth;
+              final maxHeight = constraints.maxHeight;
+              var width = maxWidth;
+              var height = maxWidth / aspectRatio;
+              if (_fitMode == _PlayerFitMode.stretch) {
+                width = maxWidth;
+                height = maxHeight;
+              } else if (_fitMode == _PlayerFitMode.contain &&
+                  height > maxHeight) {
+                height = maxHeight;
+                width = maxHeight * aspectRatio;
+              } else if (_fitMode == _PlayerFitMode.cover &&
+                  height < maxHeight) {
+                height = maxHeight;
+                width = maxHeight * aspectRatio;
+              }
+              return ClipRect(
+                child: Center(
+                  child: SizedBox(
+                    width: width,
+                    height: height,
+                    child: VideoPlayer(controller),
+                  ),
+                ),
+              );
+            },
           ),
           _buildSubtitleOverlay(controller),
         ],

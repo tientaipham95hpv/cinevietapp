@@ -26,7 +26,7 @@ class CloudHistoryService {
 
   Future<List<WatchHistoryItem>> sync() async {
     if (!ref.read(authControllerProvider).loggedIn) {
-      return const <WatchHistoryItem>[];
+      return ref.read(watchHistoryServiceProvider).items();
     }
     // Khi đã đăng nhập, cloud/backend là nguồn chuẩn để web và app đồng bộ.
     // Không push local cũ trước khi pull, tránh resurrect phim đã xoá từ web/app khác.
@@ -47,7 +47,7 @@ class CloudHistoryService {
 
   Future<List<WatchHistoryItem>> pullCloud() async {
     if (!ref.read(authControllerProvider).loggedIn) {
-      return const <WatchHistoryItem>[];
+      return ref.read(watchHistoryServiceProvider).items();
     }
     final api = ref.read(cineVietApiProvider);
     try {
@@ -65,7 +65,8 @@ class CloudHistoryService {
           )
           .where((e) => e.movieId > 0 && e.slug.isNotEmpty)
           .toList();
-      final result = remote.take(100).toList();
+      final local = await ref.read(watchHistoryServiceProvider).items();
+      final result = _mergeHistory(remote, local).take(100).toList();
       await ref.read(watchHistoryServiceProvider).replaceAll(result);
       return result;
     } on DioException {
@@ -76,11 +77,28 @@ class CloudHistoryService {
     return ref.read(watchHistoryServiceProvider).items();
   }
 
+  List<WatchHistoryItem> _mergeHistory(
+    List<WatchHistoryItem> remote,
+    List<WatchHistoryItem> local,
+  ) {
+    final byKey = <String, WatchHistoryItem>{};
+    for (final item in [...remote, ...local]) {
+      if (item.movieId <= 0 || item.slug.isEmpty) continue;
+      final existing = byKey[item.key];
+      if (existing == null || item.updatedAtMs >= existing.updatedAtMs) {
+        byKey[item.key] = item;
+      }
+    }
+    final merged = byKey.values.toList()
+      ..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
+    return merged;
+  }
+
   Future<void> save(WatchHistoryItem item) async {
-    if (!ref.read(authControllerProvider).loggedIn) return;
     await ref.read(watchHistoryServiceProvider).upsert(item);
     ref.invalidate(watchHistoryProvider);
     ref.invalidate(syncedWatchHistoryProvider);
+    if (!ref.read(authControllerProvider).loggedIn) return;
     try {
       await ref
           .read(cineVietApiProvider)
@@ -92,7 +110,10 @@ class CloudHistoryService {
   Future<void> remove(WatchHistoryItem item) async {
     final loggedIn = ref.read(authControllerProvider).loggedIn;
     if (loggedIn) {
-      await ref.read(cineVietApiProvider).dio.delete('/history/${item.movieId}');
+      await ref
+          .read(cineVietApiProvider)
+          .dio
+          .delete('/history/${item.movieId}');
     }
     // Backend deletes by movie id, so mirror that locally. This also fixes the
     // last-item case where a stale cloud row could be pulled back immediately.

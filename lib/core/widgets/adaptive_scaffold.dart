@@ -36,11 +36,13 @@ class TvSearchFocus extends InheritedWidget {
     super.key,
     required this.searchFocusNode,
     required this.heroFocusNode,
+    required this.searchFocusSignal,
     required super.child,
   });
 
   final FocusNode searchFocusNode;
   final FocusNode heroFocusNode;
+  final ValueNotifier<int> searchFocusSignal;
 
   static FocusNode? maybeOf(BuildContext context) => context
       .dependOnInheritedWidgetOfExactType<TvSearchFocus>()
@@ -48,11 +50,16 @@ class TvSearchFocus extends InheritedWidget {
   static FocusNode? heroOf(BuildContext context) => context
       .dependOnInheritedWidgetOfExactType<TvSearchFocus>()
       ?.heroFocusNode;
+  static ValueNotifier<int>? searchFocusSignalOf(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<TvSearchFocus>()
+          ?.searchFocusSignal;
 
   @override
   bool updateShouldNotify(TvSearchFocus oldWidget) =>
       searchFocusNode != oldWidget.searchFocusNode ||
-      heroFocusNode != oldWidget.heroFocusNode;
+      heroFocusNode != oldWidget.heroFocusNode ||
+      searchFocusSignal != oldWidget.searchFocusSignal;
 }
 
 class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
@@ -60,11 +67,13 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
   bool _tabletSidebarOpen = false;
   final FocusNode _searchFocusNode = FocusNode(debugLabel: 'tv-search-btn');
   final FocusNode _heroFocusNode = FocusNode(debugLabel: 'tv-hero-play-btn');
+  final ValueNotifier<int> _searchFocusSignal = ValueNotifier<int>(0);
 
   @override
   void dispose() {
     _searchFocusNode.dispose();
     _heroFocusNode.dispose();
+    _searchFocusSignal.dispose();
     super.dispose();
   }
 
@@ -208,50 +217,44 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     return TvSearchFocus(
       searchFocusNode: _searchFocusNode,
       heroFocusNode: _heroFocusNode,
+      searchFocusSignal: _searchFocusSignal,
       child: Scaffold(
-        body: Row(
+        body: Stack(
           children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              width: railWidth,
-              child: _sidePanel(expanded: false, tvMode: true),
+            Row(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  width: railWidth,
+                  child: _sidePanel(expanded: false, tvMode: true),
+                ),
+                Expanded(child: _pages()),
+              ],
             ),
-            Expanded(
-              child: Stack(
-                children: [
-                  _pages(),
-                  Positioned(
-                    right: CineVietSpacing.lg,
-                    top:
-                        MediaQuery.of(context).padding.top + CineVietSpacing.lg,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (_index == 0) ...[
-                          _glassButton(
-                            icon: Icons.search_rounded,
-                            onTap: _openSearch,
-                            tvFocusable: true,
-                            focusNode: _searchFocusNode,
-                            onKeyEvent: (node, event) {
-                              if (event is KeyDownEvent &&
-                                  event.logicalKey ==
-                                      LogicalKeyboardKey.arrowDown) {
-                                _heroFocusNode.requestFocus();
-                                return KeyEventResult.handled;
-                              }
-                              return KeyEventResult.ignored;
-                            },
-                          ),
-                          const SizedBox(width: CineVietSpacing.sm),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
+            if (_index == 0)
+              Positioned(
+                right: MediaQuery.of(context).padding.right + CineVietSpacing.lg,
+                top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
+                child: _glassButton(
+                  icon: Icons.search_rounded,
+                  onTap: _openSearch,
+                  tvFocusable: true,
+                  focusNode: _searchFocusNode,
+                  autoEnsureVisible: false,
+                  onFocusChanged: (focused) {
+                    if (focused) _searchFocusSignal.value++;
+                  },
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.arrowDown) {
+                      _heroFocusNode.requestFocus();
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                ),
               ),
-            ),
           ],
         ),
       ),
@@ -327,6 +330,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     bool tvFocusable = false,
     FocusNode? focusNode,
     FocusOnKeyEventCallback? onKeyEvent,
+    ValueChanged<bool>? onFocusChanged,
+    bool autoEnsureVisible = true,
   }) {
     // On TV the glass buttons (search / expand rail) must be reachable by the
     // D-pad; a bare InkWell is not focusable, so wrap with TvFocus there.
@@ -335,6 +340,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       onTap: onTap,
       focusNode: focusNode,
       onKeyEvent: onKeyEvent,
+      onFocusChanged: onFocusChanged,
+      autoEnsureVisible: autoEnsureVisible,
       borderRadius: BorderRadius.circular(CineVietRadius.full),
       child: Material(
         color: CineVietColors.card.withValues(alpha: 0.78),

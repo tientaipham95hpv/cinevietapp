@@ -18,6 +18,9 @@ class TvFocus extends StatefulWidget {
     this.autofocus = false,
     this.onKeyEvent,
     this.ensureVisibleAlignment = 0.5,
+    this.autoEnsureVisible = true,
+    this.onFocusChanged,
+    this.ensureParentScrollable = true,
   });
 
   final Widget child;
@@ -30,6 +33,9 @@ class TvFocus extends StatefulWidget {
   final bool autofocus;
   final FocusOnKeyEventCallback? onKeyEvent;
   final double ensureVisibleAlignment;
+  final bool autoEnsureVisible;
+  final ValueChanged<bool>? onFocusChanged;
+  final bool ensureParentScrollable;
   final Widget Function(BuildContext context, bool focused, Widget child)?
   builder;
 
@@ -98,11 +104,12 @@ class _TvFocusState extends State<TvFocus> {
       },
       onFocusChange: (value) {
         setState(() => _focused = value);
+        widget.onFocusChanged?.call(value);
         // TV/keyboard focus moved here: bring this item into view by scrolling
         // every enclosing Scrollable (vertical page + horizontal rail). This
         // replaces the old global key-scroll hack and never scrolls when focus
         // is elsewhere (e.g. sidebar), so picking a menu no longer drags home.
-        if (value && widget.enabled) {
+        if (value && widget.enabled && widget.autoEnsureVisible) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted) return;
             final ctx = context;
@@ -114,15 +121,17 @@ class _TvFocusState extends State<TvFocus> {
               duration: const Duration(milliseconds: 240),
               curve: Curves.easeOutCubic,
             );
-            final parentScrollable = Scrollable.maybeOf(ctx);
-            if (parentScrollable != null && parentScrollable.context.mounted) {
-              Scrollable.ensureVisible(
-                parentScrollable.context,
-                alignment: 0.3,
-                alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
-                duration: const Duration(milliseconds: 240),
-                curve: Curves.easeOutCubic,
-              );
+            if (widget.ensureParentScrollable) {
+              final parentScrollable = Scrollable.maybeOf(ctx);
+              if (parentScrollable != null && parentScrollable.context.mounted) {
+                Scrollable.ensureVisible(
+                  parentScrollable.context,
+                  alignment: 0.3,
+                  alignmentPolicy: ScrollPositionAlignmentPolicy.explicit,
+                  duration: const Duration(milliseconds: 240),
+                  curve: Curves.easeOutCubic,
+                );
+              }
             }
           });
         }

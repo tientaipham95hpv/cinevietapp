@@ -162,6 +162,7 @@ class _SearchBrowseScreenState extends ConsumerState<SearchBrowseScreen> {
                       controller: _searchController,
                       focusNode: _searchFocusNode,
                       nextFocusNode: _firstFilterFocusNode,
+                      platform: platform,
                       onChanged: _setSearch,
                     ),
                     const SizedBox(height: CineVietSpacing.md),
@@ -251,11 +252,13 @@ class _SearchBox extends StatefulWidget {
     required this.controller,
     required this.focusNode,
     required this.nextFocusNode,
+    required this.platform,
     required this.onChanged,
   });
   final TextEditingController controller;
   final FocusNode focusNode;
   final FocusNode nextFocusNode;
+  final PlatformInfo platform;
   final ValueChanged<String> onChanged;
 
   @override
@@ -270,7 +273,14 @@ class _SearchBoxState extends State<_SearchBox> {
       builder: (context, _) => TextField(
         controller: widget.controller,
         focusNode: widget.focusNode,
-        autofocus: true,
+        autofocus: !widget.platform.isTv,
+        // Android TV: don't autofocus/open IME when entering search. Some TV
+        // boxes crash when the soft keyboard opens during route transition;
+        // user can still press OK on the field to type.
+        readOnly: false,
+        showCursor: true,
+        enableInteractiveSelection: !widget.platform.isTv,
+        onTap: null,
         onChanged: widget.onChanged,
         textInputAction: TextInputAction.search,
         onSubmitted: (_) => widget.nextFocusNode.requestFocus(),
@@ -413,11 +423,16 @@ class _FilterChipButtonState extends State<_FilterChipButton> {
     return Focus(
       focusNode: widget.focusNode,
       onKeyEvent: (node, event) {
-        if (event is KeyDownEvent &&
-            event.logicalKey == LogicalKeyboardKey.arrowDown &&
-            widget.downFocusNode != null) {
-          widget.downFocusNode!.requestFocus();
-          return KeyEventResult.handled;
+        if (event is KeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.arrowDown &&
+              widget.downFocusNode != null) {
+            widget.downFocusNode!.requestFocus();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            FocusScope.of(context).previousFocus();
+            return KeyEventResult.handled;
+          }
         }
         return KeyEventResult.ignored;
       },
@@ -474,8 +489,14 @@ class _MovieGridSliver extends StatelessWidget {
         ? 2
         : platform.isTablet
         ? 4
+        : platform.isTv
+        ? 4
         : 5;
-    final aspect = platform.isMobile ? 0.52 : 0.56;
+    final aspect = platform.isMobile
+        ? 0.52
+        : platform.isTv
+        ? 0.58
+        : 0.56;
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(padding, 0, padding, padding + 90),
       sliver: SliverMainAxisGroup(
@@ -559,8 +580,12 @@ class _BrowseMovieCard extends StatelessWidget {
 
   void _openMovie(BuildContext context) {
     final idOrSlug = movie.slug.isNotEmpty ? movie.slug : movie.id.toString();
+    final platform = PlatformDetector.of(context);
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => MovieDetailScreen(idOrSlug: idOrSlug)),
+      MaterialPageRoute(
+        maintainState: !platform.isTv,
+        builder: (_) => MovieDetailScreen(idOrSlug: idOrSlug),
+      ),
     );
   }
 
@@ -604,10 +629,11 @@ class _BrowseMovieCard extends StatelessWidget {
                         : CachedNetworkImage(
                             imageUrl: movie.posterUrl!,
                             fit: BoxFit.cover,
-                            memCacheWidth: platform.isTv ? 420 : 320,
-                            maxWidthDiskCache: platform.isTv ? 520 : 420,
+                            memCacheWidth: platform.isTv ? 220 : 320,
+                            maxWidthDiskCache: platform.isTv ? 260 : 420,
                             fadeInDuration: Duration.zero,
                             fadeOutDuration: Duration.zero,
+                            placeholderFadeInDuration: Duration.zero,
                           ),
                     Positioned(
                       left: CineVietSpacing.xs,

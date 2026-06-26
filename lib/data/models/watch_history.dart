@@ -50,8 +50,11 @@ class WatchHistoryItem {
   final int updatedAtMs;
 
   String get key => '$slug|$serverName|$episodeName';
-  double get progress =>
-      durationMs <= 0 ? 0 : (positionMs / durationMs).clamp(0, 1);
+  double get progress {
+    if (durationMs <= 0) return positionMs >= 3000 ? 0.03 : 0;
+    return (positionMs / durationMs).clamp(0, 1);
+  }
+
   bool get completed => durationMs > 0 && progress >= 0.95;
   Duration get position => Duration(milliseconds: positionMs);
   Duration get duration => Duration(milliseconds: durationMs);
@@ -120,7 +123,9 @@ class WatchHistoryItem {
         ? durationSecondsRaw
         : fallbackDurationSeconds;
     final watchedAt = DateTime.tryParse('${json['watched_at'] ?? ''}');
-    final serverIndex = int.tryParse('${json['server_index'] ?? json['serverIndex'] ?? 0}') ?? 0;
+    final serverIndex =
+        int.tryParse('${json['server_index'] ?? json['serverIndex'] ?? 0}') ??
+        0;
     final episodeName = '${json['episode_name'] ?? json['episodeName'] ?? ''}'
         .trim();
     final episodeRaw = '${json['episode'] ?? ''}'.trim();
@@ -155,7 +160,11 @@ class WatchHistoryItem {
         posterUrl: json['posterUrl']?.toString(),
         backdropUrl: json['backdropUrl']?.toString(),
         serverName: '${json['serverName'] ?? 'Server'}',
-        serverIndex: int.tryParse('${json['serverIndex'] ?? json['server_index'] ?? 0}') ?? 0,
+        serverIndex:
+            int.tryParse(
+              '${json['serverIndex'] ?? json['server_index'] ?? 0}',
+            ) ??
+            0,
         episodeName: '${json['episodeName'] ?? 'Tập'}',
         streamUrl: '${json['streamUrl'] ?? ''}',
         positionMs: int.tryParse('${json['positionMs'] ?? 0}') ?? 0,

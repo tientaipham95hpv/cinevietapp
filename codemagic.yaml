@@ -11,15 +11,15 @@ workflows:
           flutter clean
           flutter pub get
       - name: Build mobile/tablet APKs by ABI
-        script: flutter build apk --release --flavor mobile --target-platform android-arm,android-arm64 --split-per-abi --dart-define=APP_VARIANT=mobile --build-name=1.0.6 --build-number=9074
+        script: flutter build apk --release --flavor mobile --target-platform android-arm,android-arm64 --split-per-abi --dart-define=APP_VARIANT=mobile --build-name=1.0.6 --build-number=9097
       - name: Build Android TV/TV box universal APK
-        script: flutter build apk --release --flavor tv --dart-define=APP_VARIANT=tv --dart-define=APP_IS_TV=true --build-name=1.0.6 --build-number=9074
+        script: flutter build apk --release --flavor tv --dart-define=APP_VARIANT=tv --dart-define=APP_IS_TV=true --build-name=1.0.6 --build-number=9097
       - name: Collect APK artifacts
         script: |
           mkdir -p build/app/outputs/cineviet-release
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-arm64-v8a-1.0.6+9074.apk
-          cp build/app/outputs/flutter-apk/app-armeabi-v7a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-armeabi-v7a-1.0.6+9074.apk
-          cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-universal-1.0.6+9074.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-arm64-v8a-1.0.6+9097.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-mobile-release.apk build/app/outputs/cineviet-release/CineViet-Mobile-Tablet-armeabi-v7a-1.0.6+9097.apk
+          cp build/app/outputs/flutter-apk/app-tv-release.apk build/app/outputs/cineviet-release/CineViet-Android-TV-universal-1.0.6+9097.apk
     artifacts:
       - build/app/outputs/cineviet-release/*.apk
       - build/app/outputs/flutter-apk/*-release.apk
@@ -48,16 +48,16 @@ workflows:
           cd ..
       - name: Build unsigned iOS app
         script: |
-          flutter build ios --release --no-codesign --dart-define=APP_VARIANT=ios --build-name=1.0.6 --build-number=9074
+          flutter build ios --release --no-codesign --dart-define=APP_VARIANT=ios --build-name=1.0.6 --build-number=9075
       - name: Package unsigned IPA for ESign
         script: |
           rm -rf build/ios/unsigned_ipa
           mkdir -p build/ios/unsigned_ipa/Payload
           cp -R build/ios/iphoneos/Runner.app build/ios/unsigned_ipa/Payload/
           cd build/ios/unsigned_ipa
-          zip -yr CineViet-unsigned-1.0.6+9074.ipa Payload
+          zip -yr CineViet-unsigned-1.0.6+9075.ipa Payload
     artifacts:
-      - build/ios/unsigned_ipa/CineViet-unsigned-1.0.6+9074.ipa
+      - build/ios/unsigned_ipa/CineViet-unsigned-1.0.6+9075.ipa
       - build/ios/iphoneos/Runner.app
       - /tmp/xcodebuild_logs/*.log
     publishing:
@@ -75,7 +75,7 @@ workflows:
     environment:
       flutter: stable
       vars:
-        WINDOWS_ZIP_NAME: "CineViet-Windows-1.0.6+9074.zip"
+        WINDOWS_ZIP_NAME: "CineViet-Windows-1.0.6+9097.zip"
     scripts:
       - name: Enable Windows desktop
         script: flutter config --enable-windows-desktop
@@ -84,10 +84,10 @@ workflows:
           flutter clean
           flutter pub get
       - name: Build Windows release
-        script: flutter build windows --release --dart-define=APP_VARIANT=windows --build-name=1.0.6 --build-number=9074
+        script: flutter build windows --release --dart-define=APP_VARIANT=windows --build-name=1.0.6 --build-number=9097
       - name: Package Windows portable zip
         script: |
           powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item scripts\register_windows_protocol.ps1 build\windows\x64\runner\Release\Register-CineViet-Google-Login.ps1 -Force; New-Item -ItemType Directory -Force build\windows\package | Out-Null; Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath build\windows\package\$env:WINDOWS_ZIP_NAME -Force"
     artifacts:
-      - build/windows/package/CineViet-Windows-1.0.6+9074.zip
+      - build/windows/package/CineViet-Windows-1.0.6+9097.zip
       - build/windows/x64/runner/Release/**
