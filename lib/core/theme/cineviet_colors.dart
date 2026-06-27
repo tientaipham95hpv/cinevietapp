@@ -3,19 +3,23 @@ import 'package:flutter/material.dart';
 class CineVietColors {
   CineVietColors._();
 
-  static const bg = Color(0xFF0A111F);
-  static const bg2 = Color(0xFF0D1424);
-  static const bg3 = Color(0xFF131B2E);
-  static const card = Color(0xFF1A2130);
-  static const cardHover = Color(0xFF1E2738);
-  static const border = Color(0xFF243044);
-  static const borderLight = Color(0xFF2D3A52);
-  static const inputBg = Color(0xFF131B2E);
+  static const bg = Color(0xFF07090D);
+  static const bg2 = Color(0xFF101217);
+  static const bg3 = Color(0xFF181B22);
+  static const card = Color(0xFF171A20);
+  static const cardHover = Color(0xFF20242C);
+  static const border = Color(0xFF2B3038);
+  static const borderLight = Color(0xFF3A414C);
+  static const inputBg = Color(0xFF12151B);
 
   static const accent = Color(0xFF2DE0A0);
   static const accentHover = Color(0xFF3DE8AD);
   static const accentSoft = Color(0x262DE0A0);
   static const accentGlow = Color(0x402DE0A0);
+  static const brandRed = Color(0xFFE5092F);
+  static const brandRedSoft = Color(0x2EE5092F);
+  static const gold = Color(0xFFF2C94C);
+  static const goldSoft = Color(0x26F2C94C);
 
   static const text = Color(0xFFF0F4F8);
   static const textSoft = Color(0xFFB8C4D4);

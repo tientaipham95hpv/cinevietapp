@@ -28,6 +28,11 @@ class MainActivity : FlutterActivity() {
                     resetBrightness()
                     result.success(currentBrightness())
                 }
+                "setKeepScreenOn" -> {
+                    val enabled = call.argument<Boolean>("enabled") ?: false
+                    setKeepScreenOn(enabled)
+                    result.success(null)
+                }
                 "getVolume" -> result.success(currentMusicVolume())
                 "setVolume" -> {
                     val value = (call.argument<Double>("value") ?: 1.0).coerceIn(0.0, 1.0)
@@ -77,6 +82,14 @@ class MainActivity : FlutterActivity() {
         val params = window.attributes
         params.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
         window.attributes = params
+    }
+
+    private fun setKeepScreenOn(enabled: Boolean) {
+        if (enabled) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
     }
 
     private fun currentMusicVolume(): Double {

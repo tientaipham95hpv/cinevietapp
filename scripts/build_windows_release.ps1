@@ -9,7 +9,7 @@ if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
 flutter config --enable-windows-desktop
 flutter pub get
 flutter clean
-flutter build windows --release
+flutter build windows --release --dart-define=APP_VARIANT=windows --build-name=1.0.6 --build-number=9104
 
 $releaseDir = 'build\windows\x64\runner\Release'
 if (-not (Test-Path $releaseDir)) {
@@ -18,7 +18,7 @@ if (-not (Test-Path $releaseDir)) {
 
 $outDir = 'build\windows\package'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$zip = Join-Path $outDir 'CineViet-Windows-1.0.6.zip'
+$zip = Join-Path $outDir 'CineViet-Windows-1.0.6+9104.zip'
 if (Test-Path $zip) { Remove-Item $zip -Force }
 
 Compress-Archive -Path "$releaseDir\*" -DestinationPath $zip -Force

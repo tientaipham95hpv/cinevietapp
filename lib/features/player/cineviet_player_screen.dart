@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import '../../core/platform/platform_detector.dart';
 import '../../core/theme/cineviet_colors.dart';
 import '../../core/theme/cineviet_dimensions.dart';
 import '../../core/widgets/tv_focus.dart';
@@ -68,6 +69,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   Timer? _videoOutputWatchdogTimer;
   Timer? _seekHintTimer;
   Timer? _levelApplyTimer;
+  Timer? _screenAwakeTimer;
   double? _pendingBrightness;
   double? _pendingVolume;
   WatchHistoryItem? _resumeItem;
@@ -106,6 +108,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
           : VideoViewType.textureView,
     );
   }
+
   WebViewController? _embedController;
   double? _scrubProgress;
   final FocusNode _progressFocusNode = FocusNode(debugLabel: 'PlayerProgress');
@@ -640,7 +643,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    unawaited(WakelockPlus.enable());
+    _enableScreenAwake();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -669,6 +672,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
         _controller?.pause();
       } catch (_) {}
       unawaited(_saveProgress());
+    } else if (state == AppLifecycleState.resumed) {
+      _enableScreenAwake();
     }
   }
 
@@ -890,6 +895,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
     _seekHintTimer?.cancel();
     _gestureHintTimer?.cancel();
     _levelApplyTimer?.cancel();
+    _screenAwakeTimer?.cancel();
     _saveProgress();
     if (_isWatchTogether && _isWatchHost) {
       WatchTogetherService.closeActiveRoom(forceDelete: true);
@@ -907,7 +913,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
       } catch (_) {}
     }
     _embedController = null;
-    unawaited(WakelockPlus.disable());
+    unawaited(_disableScreenAwake());
     unawaited(_resetScreenBrightness());
     if (!_switchingEpisode) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -1194,6 +1200,35 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   }
 
   static const _brightnessChannel = MethodChannel('live.cineviet/brightness');
+
+  void _enableScreenAwake() {
+    unawaited(WakelockPlus.enable());
+    unawaited(_setNativeKeepScreenOn(true));
+    _screenAwakeTimer?.cancel();
+    _screenAwakeTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+      unawaited(WakelockPlus.enable());
+      unawaited(_setNativeKeepScreenOn(true));
+    });
+  }
+
+  Future<void> _disableScreenAwake() async {
+    _screenAwakeTimer?.cancel();
+    _screenAwakeTimer = null;
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {}
+    await _setNativeKeepScreenOn(false);
+  }
+
+  Future<void> _setNativeKeepScreenOn(bool enabled) async {
+    if (Platform.isAndroid) {
+      try {
+        await _brightnessChannel.invokeMethod<void>('setKeepScreenOn', {
+          'enabled': enabled,
+        });
+      } catch (_) {}
+    }
+  }
 
   Future<void> _syncBrightnessWithDevice() async {
     try {
@@ -2160,6 +2195,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   );
 
   Widget _buildOverlay(BuildContext context) {
+    final platform = PlatformDetector.of(context);
     return AnimatedOpacity(
       opacity: _showControls || _loading || _error != null ? 1 : 0,
       duration: const Duration(milliseconds: 180),
@@ -2170,10 +2206,13 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
             end: Alignment.bottomCenter,
             colors: [
               Colors.black.withValues(alpha: 0.42),
+              CineVietColors.brandRed.withValues(
+                alpha: platform.isTv ? 0.08 : 0.02,
+              ),
               Colors.black.withValues(alpha: 0.02),
               Colors.black.withValues(alpha: 0.52),
             ],
-            stops: const [0, 0.48, 1],
+            stops: const [0, 0.28, 0.52, 1],
           ),
         ),
         child: SafeArea(
@@ -2275,12 +2314,26 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
             : position.inMilliseconds / duration.inMilliseconds;
         final displayProgress = (_scrubProgress ?? progress).clamp(0.0, 1.0);
         final displayPosition = _pendingSeekPosition ?? position;
+        final platform = PlatformDetector.of(context);
         return Container(
-          padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+          padding: EdgeInsets.fromLTRB(
+            platform.isTv || platform.isDesktop ? 18 : 14,
+            platform.isTv || platform.isDesktop ? 14 : 10,
+            platform.isTv || platform.isDesktop ? 18 : 14,
+            platform.isTv || platform.isDesktop ? 16 : 12,
+          ),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.34),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+            color: Colors.black.withValues(
+              alpha: platform.isTv || platform.isDesktop ? 0.48 : 0.34,
+            ),
+            borderRadius: BorderRadius.circular(
+              platform.isTv || platform.isDesktop ? 24 : 18,
+            ),
+            border: Border.all(
+              color: platform.isTv || platform.isDesktop
+                  ? CineVietColors.borderLight
+                  : Colors.white.withValues(alpha: 0.12),
+            ),
             boxShadow: const [
               BoxShadow(
                 color: Colors.black54,
@@ -2314,108 +2367,135 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
                 ],
               ),
               const SizedBox(height: 6),
-              FocusTraversalGroup(
-                policy: OrderedTraversalPolicy(),
-                child: SizedBox(
-                  width: MediaQuery.of(context).size.width - 56,
-                  child: Row(
-                    children: [
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(1),
-                        child: _PlayerRoundButton(
-                          icon: Icons.playlist_play_rounded,
-                          label: 'Server / Tập',
-                          onTap: () => _showServerEpisodeSheet(),
-                        ),
-                      ),
-                      const Spacer(),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(2),
-                        child: _PlayerRoundButton(
-                          icon: Icons.skip_previous_rounded,
-                          label: 'Tập trước',
-                          onTap: _playPreviousEpisode,
-                        ),
-                      ),
-                      const SizedBox(width: CineVietSpacing.sm),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(3),
-                        child: _PlayerRoundButton(
-                          icon: Icons.replay_10_rounded,
-                          label: 'Lùi 10s',
-                          onTap: () => _seekBy(const Duration(seconds: -10)),
-                        ),
-                      ),
-                      const SizedBox(width: CineVietSpacing.sm),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(4),
-                        child: _PlayerRoundButton(
-                          icon: value.isPlaying
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          label: value.isPlaying ? 'Tạm dừng' : 'Phát',
-                          primary: true,
-                          large: true,
-                          autofocus: true,
-                          focusNode: _playControlFocusNode,
-                          onTap: _togglePlay,
-                        ),
-                      ),
-                      const SizedBox(width: CineVietSpacing.sm),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(5),
-                        child: _PlayerRoundButton(
-                          icon: Icons.forward_10_rounded,
-                          label: 'Tới 10s',
-                          onTap: () => _seekBy(const Duration(seconds: 10)),
-                        ),
-                      ),
-                      const SizedBox(width: CineVietSpacing.sm),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(6),
-                        child: _PlayerRoundButton(
-                          icon: Icons.skip_next_rounded,
-                          label: 'Tập sau',
-                          onTap: _playNextEpisode,
-                        ),
-                      ),
-                      const Spacer(),
-                      if (widget.episode.subtitles.isNotEmpty)
-                        FocusTraversalOrder(
-                          order: const NumericFocusOrder(7),
-                          child: _PlayerRoundButton(
-                            icon: Icons.subtitles_rounded,
-                            label: _selectedSubtitle?.label ?? 'Phụ đề',
-                            onTap: _showSubtitleSheet,
-                          ),
-                        ),
-                      if (widget.episode.subtitles.isNotEmpty)
-                        const SizedBox(width: CineVietSpacing.sm),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(8),
-                        child: _PlayerRoundButton(
-                          icon: Icons.settings_rounded,
-                          label: 'Cài đặt',
-                          onTap: _showSettingsSheet,
-                        ),
-                      ),
-                      const SizedBox(width: CineVietSpacing.sm),
-                      FocusTraversalOrder(
-                        order: const NumericFocusOrder(10),
-                        child: _PlayerRoundButton(
-                          icon: _fitIcon,
-                          label: _fitLabel,
-                          onTap: _toggleFullscreenFit,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              _buildControlButtonsRow(platform, value),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _buildControlButtonsRow(
+    PlatformInfo platform,
+    VideoPlayerValue value,
+  ) {
+    final buttons = <Widget>[
+      _PlayerRoundButton(
+        icon: Icons.playlist_play_rounded,
+        label: 'Server / Tập',
+        onTap: () => _showServerEpisodeSheet(),
+      ),
+      _PlayerRoundButton(
+        icon: Icons.skip_previous_rounded,
+        label: 'Tập trước',
+        onTap: _playPreviousEpisode,
+      ),
+      _PlayerRoundButton(
+        icon: Icons.replay_10_rounded,
+        label: 'Lùi 10s',
+        onTap: () => _seekBy(const Duration(seconds: -10)),
+      ),
+      _PlayerRoundButton(
+        icon: value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+        label: value.isPlaying ? 'Tạm dừng' : 'Phát',
+        primary: true,
+        large: true,
+        autofocus: platform.isTv,
+        focusNode: _playControlFocusNode,
+        onTap: _togglePlay,
+      ),
+      _PlayerRoundButton(
+        icon: Icons.forward_10_rounded,
+        label: 'Tới 10s',
+        onTap: () => _seekBy(const Duration(seconds: 10)),
+      ),
+      _PlayerRoundButton(
+        icon: Icons.skip_next_rounded,
+        label: 'Tập sau',
+        onTap: _playNextEpisode,
+      ),
+      if (widget.episode.subtitles.isNotEmpty)
+        _PlayerRoundButton(
+          icon: Icons.subtitles_rounded,
+          label: _selectedSubtitle?.label ?? 'Phụ đề',
+          onTap: _showSubtitleSheet,
+        ),
+      _PlayerRoundButton(
+        icon: Icons.settings_rounded,
+        label: 'Cài đặt',
+        onTap: _showSettingsSheet,
+      ),
+      _PlayerRoundButton(
+        icon: _fitIcon,
+        label: _fitLabel,
+        onTap: _toggleFullscreenFit,
+      ),
+    ];
+
+    if (platform.isDesktop) {
+      return SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: CineVietSpacing.sm,
+          runSpacing: CineVietSpacing.sm,
+          children: buttons,
+        ),
+      );
+    }
+
+    if (!platform.isTv) {
+      return SizedBox(
+        width: double.infinity,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              for (var i = 0; i < buttons.length; i++) ...[
+                buttons[i],
+                if (i < buttons.length - 1)
+                  const SizedBox(width: CineVietSpacing.sm),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    Widget ordered(int order, Widget child) => FocusTraversalOrder(
+      order: NumericFocusOrder(order.toDouble()),
+      child: child,
+    );
+
+    return FocusTraversalGroup(
+      policy: OrderedTraversalPolicy(),
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width - 56,
+        child: Row(
+          children: [
+            ordered(1, buttons[0]),
+            const Spacer(),
+            ordered(2, buttons[1]),
+            const SizedBox(width: CineVietSpacing.sm),
+            ordered(3, buttons[2]),
+            const SizedBox(width: CineVietSpacing.sm),
+            ordered(4, buttons[3]),
+            const SizedBox(width: CineVietSpacing.sm),
+            ordered(5, buttons[4]),
+            const SizedBox(width: CineVietSpacing.sm),
+            ordered(6, buttons[5]),
+            const Spacer(),
+            if (widget.episode.subtitles.isNotEmpty) ...[
+              ordered(7, buttons[6]),
+              const SizedBox(width: CineVietSpacing.sm),
+            ],
+            ordered(8, buttons[widget.episode.subtitles.isNotEmpty ? 7 : 6]),
+            const SizedBox(width: CineVietSpacing.sm),
+            ordered(10, buttons[widget.episode.subtitles.isNotEmpty ? 8 : 7]),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -3100,12 +3180,19 @@ class _PlayerTopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final platform = PlatformDetector.of(context);
     return Container(
       padding: const EdgeInsets.all(CineVietSpacing.sm),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.18),
+        color: Colors.black.withValues(
+          alpha: platform.isTv || platform.isDesktop ? 0.34 : 0.18,
+        ),
         borderRadius: BorderRadius.circular(CineVietRadius.xl),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+        border: Border.all(
+          color: platform.isTv || platform.isDesktop
+              ? CineVietColors.borderLight
+              : Colors.white.withValues(alpha: 0.10),
+        ),
       ),
       child: Row(
         children: [
@@ -3115,6 +3202,12 @@ class _PlayerTopBar extends StatelessWidget {
             child: _PlayerIconPill(icon: Icons.arrow_back_rounded),
           ),
           const SizedBox(width: CineVietSpacing.md),
+          if (platform.isTv || platform.isDesktop) ...[
+            _PlayerBrandPill(
+              label: platform.isTv ? 'CineViet TV' : 'CineViet Windows',
+            ),
+            const SizedBox(width: CineVietSpacing.md),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3128,7 +3221,7 @@ class _PlayerTopBar extends StatelessWidget {
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    letterSpacing: -0.2,
+                    letterSpacing: 0,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -3166,6 +3259,37 @@ class _PlayerTopBar extends StatelessWidget {
             child: _PlayerIconPill(icon: Icons.lock_rounded),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PlayerBrandPill extends StatelessWidget {
+  const _PlayerBrandPill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: CineVietSpacing.md,
+        vertical: CineVietSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: CineVietColors.brandRedSoft,
+        borderRadius: BorderRadius.circular(CineVietRadius.full),
+        border: Border.all(
+          color: CineVietColors.brandRed.withValues(alpha: 0.56),
+        ),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: CineVietColors.gold,
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+        ),
       ),
     );
   }

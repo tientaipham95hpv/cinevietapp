@@ -282,7 +282,7 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
         ? 760.0
         : platform.isDesktop
         ? 780.0
-        : 700.0;
+        : 660.0;
     final heroImageUrl = platform.isMobile
         ? (movie.portraitImageUrl ?? movie.landscapeImageUrl)
         : (movie.landscapeImageUrl ?? movie.portraitImageUrl);
@@ -324,6 +324,16 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                     ),
                   ),
                 ),
+                if ((platform.isTv || platform.isDesktop) &&
+                    movie.posterUrl != null)
+                  Positioned(
+                    right: padding + CineVietSpacing.lg,
+                    bottom: padding + CineVietSpacing.md,
+                    child: _HeroPosterPreview(
+                      movie: movie,
+                      label: platform.isTv ? 'CineViet TV' : 'CineViet Windows',
+                    ),
+                  ),
                 SafeArea(
                   child: Padding(
                     padding: EdgeInsets.all(padding),
@@ -337,7 +347,11 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                         const Spacer(),
                         ConstrainedBox(
                           constraints: BoxConstraints(
-                            maxWidth: platform.isMobile ? 440 : 860,
+                            maxWidth: platform.isMobile
+                                ? 440
+                                : platform.isTv || platform.isDesktop
+                                ? 680
+                                : 860,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -398,6 +412,7 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
                                 isMobile: platform.isMobile,
                                 isTablet: platform.isTablet,
                                 isDesktop: platform.isDesktop,
+                                isTv: platform.isTv,
                                 isFavorite: isFavorite,
                                 canPlay:
                                     movie.episodes.isNotEmpty &&
@@ -448,11 +463,60 @@ class _MovieDetailContentState extends ConsumerState<_MovieDetailContent> {
   }
 }
 
+class _HeroPosterPreview extends StatelessWidget {
+  const _HeroPosterPreview({required this.movie, required this.label});
+
+  final Movie movie;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 210,
+      height: 318,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(CineVietRadius.lg),
+        border: Border.all(color: CineVietColors.borderLight),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.46),
+            blurRadius: 34,
+            offset: const Offset(0, 20),
+          ),
+          BoxShadow(
+            color: CineVietColors.brandRed.withValues(alpha: 0.18),
+            blurRadius: 28,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CachedNetworkImage(
+            imageUrl: movie.posterUrl!,
+            fit: BoxFit.cover,
+            memCacheWidth: 360,
+            maxWidthDiskCache: 420,
+          ),
+          Positioned(
+            left: CineVietSpacing.sm,
+            top: CineVietSpacing.sm,
+            child: _Chip(text: label, gold: true),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MovieActionGrid extends StatelessWidget {
   const _MovieActionGrid({
     required this.isMobile,
     required this.isTablet,
     required this.isDesktop,
+    required this.isTv,
     required this.isFavorite,
     required this.canPlay,
     required this.playLabel,
@@ -466,6 +530,7 @@ class _MovieActionGrid extends StatelessWidget {
   final bool isMobile;
   final bool isTablet;
   final bool isDesktop;
+  final bool isTv;
   final bool isFavorite;
   final bool canPlay;
   final String playLabel;
@@ -477,17 +542,37 @@ class _MovieActionGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final filledStyle = FilledButton.styleFrom(
+      backgroundColor: CineVietColors.accent,
+      foregroundColor: CineVietColors.bg,
+      textStyle: const TextStyle(fontWeight: FontWeight.w900),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(CineVietRadius.full),
+      ),
+    );
+    final outlinedStyle = OutlinedButton.styleFrom(
+      foregroundColor: CineVietColors.text,
+      textStyle: const TextStyle(fontWeight: FontWeight.w800),
+      side: const BorderSide(color: CineVietColors.borderLight),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(CineVietRadius.full),
+      ),
+      backgroundColor: CineVietColors.card.withValues(alpha: 0.68),
+    );
     final playButton = FilledButton.icon(
+      style: filledStyle,
       onPressed: canPlay ? onPlay : null,
       icon: const Icon(Icons.play_arrow_rounded),
       label: Text(playLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
     final watchTogetherButton = OutlinedButton.icon(
+      style: outlinedStyle,
       onPressed: canPlay ? onWatchTogether : null,
       icon: const Icon(Icons.groups_rounded),
       label: const Text('Xem chung'),
     );
     final favoriteButton = OutlinedButton.icon(
+      style: outlinedStyle,
       onPressed: onFavorite,
       icon: Icon(
         isFavorite ? Icons.favorite_rounded : Icons.favorite_border_rounded,
@@ -496,15 +581,57 @@ class _MovieActionGrid extends StatelessWidget {
       label: Text(isFavorite ? 'Đã yêu thích' : 'Yêu thích'),
     );
     final playlistButton = OutlinedButton.icon(
+      style: outlinedStyle,
       onPressed: onPlaylist,
       icon: const Icon(Icons.playlist_add_rounded),
       label: const Text('Thêm playlist'),
     );
     final shareButton = OutlinedButton.icon(
+      style: outlinedStyle,
       onPressed: onShare,
       icon: const Icon(Icons.ios_share_rounded),
       label: const Text('Chia sẻ'),
     );
+
+    if (isTv) {
+      return Wrap(
+        spacing: CineVietSpacing.md,
+        runSpacing: CineVietSpacing.md,
+        children: [
+          _TvActionButton(
+            icon: Icons.play_arrow_rounded,
+            label: playLabel,
+            primary: true,
+            enabled: canPlay,
+            onTap: onPlay,
+            width: 270,
+          ),
+          _TvActionButton(
+            icon: Icons.groups_rounded,
+            label: 'Xem chung',
+            enabled: canPlay,
+            onTap: onWatchTogether,
+          ),
+          _TvActionButton(
+            icon: isFavorite
+                ? Icons.favorite_rounded
+                : Icons.favorite_border_rounded,
+            label: isFavorite ? 'Đã yêu thích' : 'Yêu thích',
+            onTap: onFavorite,
+          ),
+          _TvActionButton(
+            icon: Icons.playlist_add_rounded,
+            label: 'Playlist',
+            onTap: onPlaylist,
+          ),
+          _TvActionButton(
+            icon: Icons.ios_share_rounded,
+            label: 'Chia sẻ',
+            onTap: onShare,
+          ),
+        ],
+      );
+    }
 
     // Mobile: "Xem ngay" chiếm trọn 1 dòng; "Xem chung" + "Yêu thích" 1 dòng;
     // "Thêm playlist" + "Chia sẻ" 1 dòng.
@@ -569,6 +696,91 @@ class _MovieActionGrid extends StatelessWidget {
   }
 }
 
+class _TvActionButton extends StatelessWidget {
+  const _TvActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.primary = false,
+    this.enabled = true,
+    this.width = 196,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool primary;
+  final bool enabled;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    return TvFocus(
+      enabled: enabled,
+      onTap: enabled ? onTap : () {},
+      borderRadius: BorderRadius.circular(CineVietRadius.full),
+      scale: 1.04,
+      builder: (context, focused, child) {
+        final active = focused || primary;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          width: width,
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: CineVietSpacing.md),
+          decoration: BoxDecoration(
+            color: primary
+                ? CineVietColors.accent
+                : focused
+                ? CineVietColors.cardHover
+                : CineVietColors.card.withValues(alpha: 0.88),
+            borderRadius: BorderRadius.circular(CineVietRadius.full),
+            border: Border.all(
+              color: active
+                  ? CineVietColors.accent
+                  : CineVietColors.borderLight,
+              width: focused ? 2 : 1,
+            ),
+            boxShadow: focused
+                ? [
+                    BoxShadow(
+                      color: CineVietColors.accentGlow,
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: primary ? CineVietColors.bg : CineVietColors.accent,
+                size: primary ? 30 : 24,
+              ),
+              const SizedBox(width: CineVietSpacing.sm),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: primary ? CineVietColors.bg : CineVietColors.text,
+                    fontWeight: FontWeight.w900,
+                    fontSize: primary ? 18 : 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      child: const SizedBox.shrink(),
+    );
+  }
+}
+
 class _EpisodeList extends StatefulWidget {
   const _EpisodeList({required this.movie, required this.onSelected});
   final Movie movie;
@@ -597,8 +809,9 @@ class _EpisodeListState extends State<_EpisodeList> {
         style: TextStyle(color: CineVietColors.textSoft),
       );
     }
+    final platform = PlatformDetector.of(context);
     final selectedServer = widget.movie.episodes[_selectedServerIndex];
-    return Column(
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SingleChildScrollView(
@@ -643,6 +856,44 @@ class _EpisodeListState extends State<_EpisodeList> {
           ],
         ),
       ],
+    );
+    if (!platform.isTv) return content;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(CineVietSpacing.lg),
+      decoration: BoxDecoration(
+        color: CineVietColors.card.withValues(alpha: 0.76),
+        borderRadius: BorderRadius.circular(CineVietRadius.lg),
+        border: Border.all(color: CineVietColors.borderLight),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 24,
+            offset: const Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _Chip(text: 'Chọn nguồn', gold: true),
+              const SizedBox(width: CineVietSpacing.sm),
+              Text(
+                '${selectedServer.displayName} • ${selectedServer.items.length} tập',
+                style: const TextStyle(
+                  color: CineVietColors.textSoft,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: CineVietSpacing.md),
+          content,
+        ],
+      ),
     );
   }
 }
@@ -1922,8 +2173,9 @@ class _ExpandableDescriptionState extends State<_ExpandableDescription> {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip({required this.text});
+  const _Chip({required this.text, this.gold = false});
   final String text;
+  final bool gold;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(
@@ -1931,14 +2183,18 @@ class _Chip extends StatelessWidget {
       vertical: CineVietSpacing.xs,
     ),
     decoration: BoxDecoration(
-      color: CineVietColors.accentSoft,
+      color: gold ? CineVietColors.goldSoft : CineVietColors.accentSoft,
       borderRadius: BorderRadius.circular(CineVietRadius.full),
-      border: Border.all(color: CineVietColors.accent.withValues(alpha: 0.45)),
+      border: Border.all(
+        color: (gold ? CineVietColors.gold : CineVietColors.accent).withValues(
+          alpha: 0.45,
+        ),
+      ),
     ),
     child: Text(
       text,
-      style: const TextStyle(
-        color: CineVietColors.accent,
+      style: TextStyle(
+        color: gold ? CineVietColors.gold : CineVietColors.accent,
         fontWeight: FontWeight.w800,
         fontSize: 12,
       ),

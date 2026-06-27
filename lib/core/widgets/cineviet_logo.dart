@@ -31,7 +31,7 @@ class CineVietLogo extends StatelessWidget {
             color: CineVietColors.accent,
             fontSize: 28,
             fontWeight: FontWeight.w900,
-            letterSpacing: -0.4,
+            letterSpacing: 0,
           ),
         ),
       ],

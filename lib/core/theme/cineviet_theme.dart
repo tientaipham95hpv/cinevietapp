@@ -11,14 +11,14 @@ class CineVietTheme {
       scaffoldBackgroundColor: CineVietColors.bg,
       colorScheme: const ColorScheme.dark(
         primary: CineVietColors.accent,
-        secondary: CineVietColors.accentHover,
+        secondary: CineVietColors.brandRed,
         surface: CineVietColors.card,
         error: CineVietColors.red,
         onPrimary: Colors.white,
         onSurface: CineVietColors.text,
       ),
       textTheme: base.textTheme.apply(
-          bodyColor: CineVietColors.text,
+        bodyColor: CineVietColors.text,
         displayColor: CineVietColors.text,
       ),
       cardTheme: CardThemeData(
@@ -30,17 +30,24 @@ class CineVietTheme {
         ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: CineVietColors.card,
+        backgroundColor: CineVietColors.bg2,
         selectedItemColor: CineVietColors.accent,
         unselectedItemColor: CineVietColors.muted,
         type: BottomNavigationBarType.fixed,
       ),
       navigationRailTheme: const NavigationRailThemeData(
-        backgroundColor: CineVietColors.card,
+        backgroundColor: CineVietColors.bg2,
         selectedIconTheme: IconThemeData(color: CineVietColors.accent),
         unselectedIconTheme: IconThemeData(color: CineVietColors.muted),
-        selectedLabelTextStyle: TextStyle(color: CineVietColors.accent, fontWeight: FontWeight.w700),
+        selectedLabelTextStyle: TextStyle(
+          color: CineVietColors.accent,
+          fontWeight: FontWeight.w700,
+        ),
         unselectedLabelTextStyle: TextStyle(color: CineVietColors.textSoft),
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: CineVietColors.accent,
+        linearTrackColor: CineVietColors.border,
       ),
     );
   }

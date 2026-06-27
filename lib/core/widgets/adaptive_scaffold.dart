@@ -234,7 +234,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
             ),
             if (_index == 0)
               Positioned(
-                right: MediaQuery.of(context).padding.right + CineVietSpacing.lg,
+                right:
+                    MediaQuery.of(context).padding.right + CineVietSpacing.lg,
                 top: MediaQuery.of(context).padding.top + CineVietSpacing.lg,
                 child: _glassButton(
                   icon: Icons.search_rounded,
@@ -266,8 +267,8 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
       body: Row(
         children: [
           SizedBox(
-            width: 240,
-            child: _sidePanel(expanded: true, tvMode: false),
+            width: 264,
+            child: _sidePanel(expanded: true, tvMode: false, desktopMode: true),
           ),
           Expanded(
             child: Stack(
@@ -291,11 +292,24 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
     );
   }
 
-  Widget _sidePanel({required bool expanded, required bool tvMode}) {
+  Widget _sidePanel({
+    required bool expanded,
+    required bool tvMode,
+    bool desktopMode = false,
+  }) {
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: CineVietColors.card,
-        border: Border(right: BorderSide(color: CineVietColors.border)),
+      decoration: BoxDecoration(
+        color: desktopMode ? CineVietColors.bg2 : CineVietColors.card,
+        border: const Border(right: BorderSide(color: CineVietColors.border)),
+        boxShadow: desktopMode
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.28),
+                  blurRadius: 24,
+                  offset: const Offset(10, 0),
+                ),
+              ]
+            : null,
       ),
       child: SafeArea(
         child: Column(
@@ -316,8 +330,33 @@ class _AdaptiveScaffoldState extends State<AdaptiveScaffold> {
                 selected: i == _index,
                 expanded: expanded,
                 tvMode: tvMode,
+                desktopMode: desktopMode,
                 onTap: () => _select(i),
               ),
+            if (desktopMode) ...[
+              const Spacer(),
+              Padding(
+                padding: const EdgeInsets.all(CineVietSpacing.lg),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(CineVietSpacing.md),
+                  decoration: BoxDecoration(
+                    color: CineVietColors.brandRedSoft,
+                    borderRadius: BorderRadius.circular(CineVietRadius.lg),
+                    border: Border.all(
+                      color: CineVietColors.brandRed.withValues(alpha: 0.36),
+                    ),
+                  ),
+                  child: const Text(
+                    'CineViet Windows',
+                    style: TextStyle(
+                      color: CineVietColors.gold,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -369,12 +408,14 @@ class _NavTile extends StatefulWidget {
     required this.selected,
     required this.expanded,
     required this.tvMode,
+    required this.desktopMode,
     required this.onTap,
   });
   final CineVietDestination destination;
   final bool selected;
   final bool expanded;
   final bool tvMode;
+  final bool desktopMode;
   final VoidCallback onTap;
 
   @override
@@ -430,13 +471,19 @@ class _NavTileState extends State<_NavTile> {
               ),
               decoration: BoxDecoration(
                 color: tileActive
-                    ? (widget.tvMode && tvFocused
+                    ? (widget.desktopMode && widget.selected
+                          ? CineVietColors.brandRedSoft
+                          : widget.tvMode && tvFocused
                           ? CineVietColors.cardHover
                           : CineVietColors.accentSoft)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(CineVietRadius.lg),
                 border: focused && !widget.tvMode
                     ? Border.all(color: CineVietColors.accent, width: 2)
+                    : widget.desktopMode && widget.selected
+                    ? Border.all(
+                        color: CineVietColors.brandRed.withValues(alpha: 0.44),
+                      )
                     : null,
               ),
               child: widget.expanded

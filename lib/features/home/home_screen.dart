@@ -246,7 +246,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         const SizedBox(height: CineVietSpacing.xl),
                       ],
                       _HomeMovieSection(
-                        title: 'Phim nổi bật',
+                        title: 'Top CineViet',
                         icon: Icons.star_rounded,
                         data: featured,
                         fallbackMovies: latestMovies,
@@ -258,7 +258,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         },
                       ),
                       _HomeMovieSection(
-                        title: 'Phim mới cập nhật',
+                        title: 'Mới cập nhật hôm nay',
                         icon: Icons.new_releases_rounded,
                         data: latest,
                         cardWidth: cardWidth,
@@ -371,7 +371,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     const SizedBox(height: CineVietSpacing.xl),
                   ],
                   _HomeMovieSection(
-                    title: 'Phim mới cập nhật',
+                    title: 'Mới cập nhật hôm nay',
                     icon: Icons.new_releases_rounded,
                     data: latest,
                     cardWidth: cardWidth,
@@ -570,6 +570,9 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                           end: Alignment.centerLeft,
                           colors: [
                             Colors.transparent,
+                            CineVietColors.brandRed.withValues(
+                              alpha: widget.platform.isMobile ? 0.12 : 0.18,
+                            ),
                             CineVietColors.bg.withValues(
                               alpha: widget.platform.isMobile ? 0.46 : 0.62,
                             ),
@@ -577,7 +580,7 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                               alpha: widget.platform.isMobile ? 0.82 : 0.96,
                             ),
                           ],
-                          stops: const [0.0, 0.50, 1.0],
+                          stops: const [0.0, 0.36, 0.64, 1.0],
                         ),
                       ),
                     ),
@@ -635,7 +638,7 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                           children: [
                             _HeroPill(
                               icon: Icons.star_rounded,
-                              text: 'Phim nổi bật',
+                              text: 'CineViet đề xuất',
                             ),
                           ],
                         ),
@@ -653,7 +656,7 @@ class _FeaturedHeroCarouselState extends ConsumerState<_FeaturedHeroCarousel> {
                             height: 1.04,
                             fontWeight: FontWeight.w900,
                             color: Colors.white,
-                            letterSpacing: -0.6,
+                            letterSpacing: 0,
                           ),
                         ),
                         const SizedBox(height: CineVietSpacing.sm),
@@ -735,15 +738,17 @@ class _HeroPill extends StatelessWidget {
       vertical: CineVietSpacing.sm,
     ),
     decoration: BoxDecoration(
-      color: Colors.black.withValues(alpha: 0.42),
-      border: Border.all(color: Colors.white24),
+      color: CineVietColors.brandRedSoft,
+      border: Border.all(
+        color: CineVietColors.brandRed.withValues(alpha: 0.62),
+      ),
       borderRadius: BorderRadius.circular(CineVietRadius.full),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[
-          Icon(icon, color: CineVietColors.accent, size: 16),
+          Icon(icon, color: CineVietColors.gold, size: 16),
           const SizedBox(width: CineVietSpacing.xs),
         ],
         Text(
@@ -809,6 +814,13 @@ class _HeroButton extends ConsumerWidget {
             color: CineVietColors.accent,
             borderRadius: BorderRadius.circular(CineVietRadius.full),
             border: Border.all(color: CineVietColors.accent),
+            boxShadow: [
+              BoxShadow(
+                color: CineVietColors.accentGlow,
+                blurRadius: 22,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -896,31 +908,54 @@ class _SectionHeader extends StatelessWidget {
   final IconData icon;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Container(
-        width: 4,
-        height: 26,
-        decoration: BoxDecoration(
-          color: CineVietColors.accent,
-          borderRadius: BorderRadius.circular(99),
-        ),
-      ),
-      const SizedBox(width: CineVietSpacing.sm),
-      Icon(icon, color: CineVietColors.accent, size: 22),
-      const SizedBox(width: CineVietSpacing.sm),
-      Expanded(
-        child: Text(
-          title,
-          style: const TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.2,
+  Widget build(BuildContext context) {
+    final platform = PlatformDetector.of(context);
+    return Row(
+      children: [
+        Container(
+          width: platform.isTv ? 6 : 5,
+          height: platform.isTv ? 32 : 28,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [CineVietColors.brandRed, CineVietColors.accent],
+            ),
+            borderRadius: BorderRadius.circular(99),
+            boxShadow: [
+              BoxShadow(
+                color: CineVietColors.brandRed.withValues(alpha: 0.28),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
         ),
-      ),
-    ],
-  );
+        const SizedBox(width: CineVietSpacing.sm),
+        Container(
+          width: platform.isTv ? 34 : 30,
+          height: platform.isTv ? 34 : 30,
+          decoration: BoxDecoration(
+            color: CineVietColors.cardHover,
+            border: Border.all(color: CineVietColors.borderLight),
+            borderRadius: BorderRadius.circular(CineVietRadius.sm),
+          ),
+          child: Icon(icon, color: CineVietColors.accent, size: 19),
+        ),
+        const SizedBox(width: CineVietSpacing.sm),
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: platform.isTv ? 25 : 22,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _MovieAsyncRail extends StatelessWidget {
@@ -1064,15 +1099,28 @@ class _RealMovieCard extends ConsumerWidget {
       padding: const EdgeInsets.all(CineVietSpacing.xs),
       scale: 1.025,
       ensureParentScrollable: false,
-      builder: (context, focused, child) => SizedBox(
+      builder: (context, focused, child) => AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOutCubic,
         width: width + CineVietSpacing.sm,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: focused ? CineVietColors.cardHover : Colors.transparent,
-            borderRadius: BorderRadius.circular(CineVietRadius.xl),
+        decoration: BoxDecoration(
+          color: focused ? CineVietColors.cardHover : Colors.transparent,
+          borderRadius: BorderRadius.circular(CineVietRadius.xl),
+          border: Border.all(
+            color: focused ? CineVietColors.accent : Colors.transparent,
+            width: focused ? 1.5 : 1,
           ),
-          child: child,
+          boxShadow: focused
+              ? [
+                  BoxShadow(
+                    color: CineVietColors.accentGlow,
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
+                  ),
+                ]
+              : null,
         ),
+        child: child,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1083,7 +1131,7 @@ class _RealMovieCard extends ConsumerWidget {
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(CineVietRadius.lg),
-                border: Border.all(color: CineVietColors.border),
+                border: Border.all(color: CineVietColors.borderLight),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.32),
@@ -1124,10 +1172,11 @@ class _RealMovieCard extends ConsumerWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
+                            CineVietColors.brandRed.withValues(alpha: 0.18),
                             Colors.transparent,
                             Colors.black.withValues(alpha: 0.74),
                           ],
-                          stops: const [0.56, 1],
+                          stops: const [0.0, 0.48, 1],
                         ),
                       ),
                     ),
@@ -1315,9 +1364,20 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
           width: widget.width,
           padding: const EdgeInsets.all(CineVietSpacing.sm),
           decoration: BoxDecoration(
-            color: CineVietColors.card,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [CineVietColors.cardHover, CineVietColors.card],
+            ),
             borderRadius: BorderRadius.circular(CineVietRadius.lg),
-            border: Border.all(color: CineVietColors.border),
+            border: Border.all(color: CineVietColors.borderLight),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
           child: Stack(
             children: [
@@ -1375,6 +1435,7 @@ class _ContinueCardState extends ConsumerState<_ContinueCard> {
                           value: widget.item.progress,
                           backgroundColor: CineVietColors.border,
                           color: CineVietColors.accent,
+                          minHeight: 5,
                         ),
                       ],
                     ),
