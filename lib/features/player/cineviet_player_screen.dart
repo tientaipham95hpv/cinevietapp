@@ -289,27 +289,6 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
         final alreadyProxy =
             parsed?.host == 'cineviet.live' && parsed?.path == '/api/stream';
 
-        if (_isAndroidTvBuild && !alreadyProxy) {
-          // Android TV boxes are more likely to fail on 1080p/high-profile
-          // encodes. Try safer renditions first, then original as last resort.
-          final safe480 = _proxiedStreamUrl(
-            sourceUrl,
-            androidTvSafe: true,
-            maxHeight: 480,
-            maxBandwidth: 4000000,
-          );
-          final safe720 = _proxiedStreamUrl(
-            sourceUrl,
-            androidTvSafe: true,
-            maxHeight: 720,
-            maxBandwidth: 8000000,
-          );
-          if (seen.add(safe480)) urls.add(safe480);
-          if (seen.add(safe720)) urls.add(safe720);
-          if (seen.add(sourceUrl)) urls.add(sourceUrl);
-          continue;
-        }
-
         final preferred = alreadyProxy
             ? sourceUrl
             : _proxiedStreamUrl(sourceUrl, androidTvSafe: true);

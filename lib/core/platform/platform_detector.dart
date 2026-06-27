@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 enum CineVietPlatform { mobile, tablet, tv, desktop }
 
+const bool _isTvBuild = bool.fromEnvironment('APP_IS_TV');
+
 class PlatformInfo {
   const PlatformInfo({
     required this.type,
@@ -37,7 +39,9 @@ class PlatformDetector {
     final directionalNav = mq.navigationMode == NavigationMode.directional;
 
     CineVietPlatform type;
-    if (!kIsWeb &&
+    if (!kIsWeb && Platform.isAndroid && _isTvBuild) {
+      type = CineVietPlatform.tv;
+    } else if (!kIsWeb &&
         (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
       type = CineVietPlatform.desktop;
     } else if (shortest >= 600) {

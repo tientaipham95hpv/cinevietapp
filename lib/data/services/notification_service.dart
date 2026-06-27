@@ -44,6 +44,12 @@ class NotificationService {
 
     if (Platform.isAndroid) {
       const buildVariant = String.fromEnvironment('APP_VARIANT');
+      const isTvBuild = bool.fromEnvironment('APP_IS_TV');
+      final variant = buildVariant.isNotEmpty
+          ? buildVariant
+          : isTvBuild
+              ? 'tv'
+              : '';
       final currentAbi = Abi.current();
       final abi = currentAbi == Abi.androidArm
           ? 'armeabi-v7a'
@@ -56,7 +62,7 @@ class NotificationService {
                       : currentAbi.toString().split('.').last;
       return {
         'platform': 'android',
-        if (buildVariant.isNotEmpty) 'variant': buildVariant,
+        if (variant.isNotEmpty) 'variant': variant,
         'abi': abi,
       };
     }
