@@ -1287,7 +1287,7 @@ class _ContinueWatchingSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final filtered =
-        items.where((e) => !e.completed && e.progress > 0.02).toList()
+        items.where((e) => !e.completed && e.positionMs >= 3000).toList()
           ..sort((a, b) => b.updatedAtMs.compareTo(a.updatedAtMs));
     final displayItems = _latestEpisodePerMovie(filtered);
     if (displayItems.isEmpty) return const SizedBox.shrink();

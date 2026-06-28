@@ -95,15 +95,15 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   int _activeCandidateIndex = 0;
 
   VideoPlayerController _createVideoController(String streamUrl) {
-    // Android texture rendering is fragile on some TV boxes/tablets: ExoPlayer
-    // can keep audio playing while Flutter's texture stays blank. PlatformView
-    // uses the native video surface and is more reliable for these devices.
+    // PlatformView can render as a white surface on several Android TV boxes
+    // when layered with Flutter overlays. Keep it for touch Android, but use
+    // Flutter's texture path for the TV flavor.
     // ignore: deprecated_member_use
     return VideoPlayerController.network(
       streamUrl,
       formatHint: VideoFormat.hls,
       httpHeaders: _headersForStreamUrl(streamUrl),
-      viewType: Platform.isAndroid
+      viewType: Platform.isAndroid && !_isAndroidTvBuild
           ? VideoViewType.platformView
           : VideoViewType.textureView,
     );
