@@ -69,6 +69,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   Timer? _videoOutputWatchdogTimer;
   Timer? _seekHintTimer;
   Timer? _levelApplyTimer;
+  Timer? _levelSyncTimer;
   Timer? _screenAwakeTimer;
   double? _pendingBrightness;
   double? _pendingVolume;
@@ -83,6 +84,8 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   bool _applyingWatchSync = false;
   bool _recoveringPlaybackError = false;
   static const bool _isAndroidTvBuild = bool.fromEnvironment('APP_IS_TV');
+  bool get _usesNativeSystemVolume => Platform.isAndroid || Platform.isIOS;
+  bool get _usesNativeScreenBrightness => Platform.isAndroid || Platform.isIOS;
   EpisodeSubtitle? _selectedSubtitle;
   List<_SubtitleCue> _subtitleCues = const [];
   bool _subtitleLoading = false;
@@ -655,6 +658,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
     _bindWatchTogetherSocket();
     _syncBrightnessWithDevice();
     _loadSystemVolume();
+    _startLevelSyncTimer();
     _selectedSubtitle = widget.episode.subtitles.isNotEmpty
         ? widget.episode.subtitles.first
         : null;
@@ -868,7 +872,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
     }
 
     try {
-      await controller.setVolume(_appVolume);
+      await controller.setVolume(_videoControllerVolume);
       final roomState = _watchRoomState;
       if (_isWatchTogether &&
           !_isWatchHost &&
@@ -895,6 +899,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
     _seekHintTimer?.cancel();
     _gestureHintTimer?.cancel();
     _levelApplyTimer?.cancel();
+    _levelSyncTimer?.cancel();
     _screenAwakeTimer?.cancel();
     _saveProgress();
     if (_isWatchTogether && _isWatchHost) {
@@ -1084,7 +1089,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
               ? const Duration(seconds: 12)
               : const Duration(seconds: 30),
         );
-        await nextController.setVolume(_appVolume);
+        await nextController.setVolume(_videoControllerVolume);
         await _applyResumeSeek(nextController);
         if (mounted) {
           setState(() {
@@ -1201,6 +1206,22 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
 
   static const _brightnessChannel = MethodChannel('live.cineviet/brightness');
 
+  double get _videoControllerVolume =>
+      _usesNativeSystemVolume ? 1.0 : _appVolume;
+
+  void _startLevelSyncTimer() {
+    _levelSyncTimer?.cancel();
+    _levelSyncTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_dragMode == 'level' ||
+          _pendingBrightness != null ||
+          _pendingVolume != null) {
+        return;
+      }
+      unawaited(_syncBrightnessWithDevice());
+      unawaited(_loadSystemVolume());
+    });
+  }
+
   void _enableScreenAwake() {
     unawaited(WakelockPlus.enable());
     unawaited(_setNativeKeepScreenOn(true));
@@ -1231,6 +1252,7 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   }
 
   Future<void> _syncBrightnessWithDevice() async {
+    if (!_usesNativeScreenBrightness) return;
     try {
       final brightness = await _brightnessChannel.invokeMethod<double>('get');
       if (mounted && brightness != null) {
@@ -1242,12 +1264,14 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   }
 
   Future<void> _resetScreenBrightness() async {
+    if (!_usesNativeScreenBrightness) return;
     try {
       await _brightnessChannel.invokeMethod<double>('reset');
     } catch (_) {}
   }
 
   Future<double?> _setScreenBrightness(double value) async {
+    if (!_usesNativeScreenBrightness) return value.clamp(0.0, 1.0);
     try {
       final actual = await _brightnessChannel.invokeMethod<double>('set', {
         'value': value,
@@ -1259,16 +1283,29 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
   }
 
   Future<void> _loadSystemVolume() async {
+    if (!_usesNativeSystemVolume) return;
     try {
       final volume = await _brightnessChannel.invokeMethod<double>('getVolume');
       if (mounted && volume != null) {
         setState(() => _appVolume = volume.clamp(0.0, 1.0));
       }
+      try {
+        await _controller?.setVolume(1.0);
+      } catch (_) {}
     } catch (_) {}
   }
 
   Future<double?> _setSystemVolume(double value) async {
+    if (!_usesNativeSystemVolume) {
+      try {
+        await _controller?.setVolume(value);
+      } catch (_) {}
+      return value.clamp(0.0, 1.0);
+    }
     try {
+      try {
+        await _controller?.setVolume(1.0);
+      } catch (_) {}
       final actual = await _brightnessChannel.invokeMethod<double>(
         'setVolume',
         {'value': value},
@@ -1303,13 +1340,12 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
           _screenBrightness = actual;
           if (_gestureMode == 'brightness') _gestureValue = actual;
         });
+      } else if (settle && actual == null) {
+        await _syncBrightnessWithDevice();
       }
     }
 
     if (volume != null) {
-      try {
-        _controller?.setVolume(volume);
-      } catch (_) {}
       final actual = await _setSystemVolume(volume);
       if (settle && mounted && actual != null) {
         setState(() {
@@ -1317,8 +1353,10 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
           if (_gestureMode == 'volume') _gestureValue = actual;
         });
         try {
-          _controller?.setVolume(actual);
+          _controller?.setVolume(_videoControllerVolume);
         } catch (_) {}
+      } else if (settle && actual == null) {
+        await _loadSystemVolume();
       }
     }
   }
@@ -1406,9 +1444,11 @@ class _CineVietPlayerScreenState extends ConsumerState<CineVietPlayerScreen>
         _gestureMode = 'volume';
         _gestureValue = next;
       });
-      try {
-        controller.setVolume(next);
-      } catch (_) {}
+      if (!_usesNativeSystemVolume) {
+        try {
+          controller.setVolume(next);
+        } catch (_) {}
+      }
       _pendingVolume = next;
       _scheduleLevelApply();
       _armGestureHideTimer();
