@@ -5208,6 +5208,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? saveTimer;
   Timer? controlsTimer;
   Timer? levelApplyTimer;
+  Timer? levelSyncTimer;
   final focusNode = FocusNode();
   late EpisodeServer currentServer;
   late EpisodeItem currentEpisode;
@@ -5247,6 +5248,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       !isTvBuild &&
       (Platform.isAndroid || Platform.isIOS || Platform.isWindows);
   bool get usesWindowsBrightnessOverlay => !isTvBuild && Platform.isWindows;
+  bool get usesNativeSystemVolume => Platform.isAndroid || Platform.isIOS;
+  bool get usesNativeScreenBrightness => Platform.isAndroid || Platform.isIOS;
+  double get videoControllerVolume => usesNativeSystemVolume ? 1.0 : appVolume;
 
   @override
   void initState() {
@@ -5258,6 +5262,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     watchMessages.addAll(widget.watchTogetherState?.messages ?? const []);
     WakelockPlus.enable();
     _syncDeviceLevels();
+    _startLevelSyncTimer();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
@@ -5307,7 +5312,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         controller = next;
         await next.initialize();
         await next.setPlaybackSpeed(playbackSpeed);
-        await next.setVolume(appVolume);
+        await next.setVolume(videoControllerVolume);
         if (isWatchTogether && !isWatchHost && watchRoomState != null) {
           final target = Duration(
             milliseconds: (watchRoomState!.currentTime * 1000).round(),
@@ -5440,24 +5445,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _syncDeviceLevels() async {
     if (!supportsTouchLevels) return;
-    try {
-      final brightness = await brightnessChannel.invokeMethod<double>('get');
-      if (brightness != null && mounted) {
-        setState(() => screenBrightness = brightness.clamp(0.0, 1.0));
-      }
-    } catch (_) {}
-    try {
-      final volume = await brightnessChannel.invokeMethod<double>('getVolume');
-      if (volume != null && mounted) {
-        appVolume = volume.clamp(0.0, 1.0);
+    if (usesNativeScreenBrightness) {
+      try {
+        final brightness = await brightnessChannel.invokeMethod<double>('get');
+        if (brightness != null && mounted) {
+          setState(() => screenBrightness = brightness.clamp(0.0, 1.0));
+        }
+      } catch (_) {}
+    }
+    if (usesNativeSystemVolume) {
+      try {
+        final volume = await brightnessChannel.invokeMethod<double>(
+          'getVolume',
+        );
+        if (volume != null && mounted) {
+          appVolume = volume.clamp(0.0, 1.0);
+          await controller?.setVolume(1.0);
+          setState(() {});
+        }
+      } catch (_) {}
+    } else {
+      try {
         await controller?.setVolume(appVolume);
-        setState(() {});
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
   }
 
   Future<double?> _setBrightness(double value) async {
     final next = value.clamp(0.0, 1.0);
+    if (!usesNativeScreenBrightness) return next;
     try {
       final actual = await brightnessChannel.invokeMethod<double>('set', {
         'value': next,
@@ -5469,8 +5485,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<double?> _setVolume(double value) async {
     final next = value.clamp(0.0, 1.0);
+    if (!usesNativeSystemVolume) {
+      try {
+        await controller?.setVolume(next);
+      } catch (_) {}
+      return next;
+    }
     try {
-      await controller?.setVolume(next);
+      await controller?.setVolume(1.0);
     } catch (_) {}
     try {
       final actual = await brightnessChannel.invokeMethod<double>('setVolume', {
@@ -5505,13 +5527,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           screenBrightness = actual;
           if (gestureMode == 'brightness') gestureValue = actual;
         });
+      } else if (settle && actual == null) {
+        await _syncDeviceLevels();
       }
     }
 
     if (volume != null) {
-      try {
-        await controller?.setVolume(volume);
-      } catch (_) {}
       final actual = await _setVolume(volume);
       if (settle && mounted && actual != null) {
         setState(() {
@@ -5519,10 +5540,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (gestureMode == 'volume') gestureValue = actual;
         });
         try {
-          await controller?.setVolume(actual);
+          await controller?.setVolume(videoControllerVolume);
         } catch (_) {}
+      } else if (settle && actual == null) {
+        await _syncDeviceLevels();
       }
     }
+  }
+
+  void _startLevelSyncTimer() {
+    levelSyncTimer?.cancel();
+    levelSyncTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (dragMode == 'level' ||
+          pendingBrightness != null ||
+          pendingVolume != null) {
+        return;
+      }
+      unawaited(_syncDeviceLevels());
+    });
   }
 
   void _togglePlay() {
@@ -5674,9 +5709,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         gestureMode = 'volume';
         gestureValue = next;
       });
-      try {
-        c.setVolume(next);
-      } catch (_) {}
+      if (!usesNativeSystemVolume) {
+        try {
+          c.setVolume(next);
+        } catch (_) {}
+      }
       pendingVolume = next;
       _scheduleLevelApply();
     }
@@ -5834,6 +5871,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _save();
     controlsTimer?.cancel();
     levelApplyTimer?.cancel();
+    levelSyncTimer?.cancel();
     saveTimer?.cancel();
     if (isWatchTogether && !leavingPlayer) {
       widget.repo.closeWatchRoom(forceDelete: isWatchHost);
@@ -5843,7 +5881,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     controller?.removeListener(_maybeAutoNext);
     controller?.dispose();
     WakelockPlus.disable();
-    if (supportsTouchLevels) {
+    if (usesNativeScreenBrightness) {
       brightnessChannel.invokeMethod<double>('reset').catchError((_) => null);
     }
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);

@@ -45,7 +45,9 @@ import UIKit
         case "setVolume":
           let value = self?.doubleArg(call.arguments, key: "value", fallback: 1.0) ?? 1.0
           self?.setSystemVolume(value)
-          result(Double(AVAudioSession.sharedInstance().outputVolume))
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            result(Double(AVAudioSession.sharedInstance().outputVolume))
+          }
         default:
           result(FlutterMethodNotImplemented)
         }

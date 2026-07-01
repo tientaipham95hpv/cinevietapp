@@ -15,7 +15,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, brightnessChannel).setMethodCallHandler { call, result ->
             when (call.method) {
-                "get" -> result.success(currentBrightness())
+                "get" -> result.success(currentAppliedBrightness())
                 "set" -> {
                     val value = (call.argument<Double>("value") ?: 0.5).coerceIn(0.0, 1.0)
                     applyBrightness(value)
@@ -36,6 +36,9 @@ class MainActivity : FlutterActivity() {
                     val audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
                     val target = Math.round((value * max).toFloat()).coerceIn(0, max)
+                    if (target > 0) {
+                        audio.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+                    }
                     audio.setStreamVolume(AudioManager.STREAM_MUSIC, target, 0)
                     result.success(currentMusicVolume())
                 }
@@ -61,7 +64,7 @@ class MainActivity : FlutterActivity() {
 
     private fun applyBrightness(value: Double) {
         val params = window.attributes
-        params.screenBrightness = value.toFloat().coerceIn(0f, 1f)
+        params.screenBrightness = value.toFloat().coerceIn(0.01f, 1f)
         window.attributes = params
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
