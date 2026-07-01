@@ -5373,7 +5373,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _scheduleControlsHide() {
     controlsTimer?.cancel();
-    controlsTimer = Timer(const Duration(seconds: 5), () {
+    controlsTimer = Timer(Duration(seconds: isTvBuild ? 8 : 5), () {
       if (mounted && controller?.value.isPlaying == true && !controlsLocked) {
         setState(() => controls = false);
       }
@@ -5921,18 +5921,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
           focusNode: focusNode,
           onKeyEvent: (event) {
             if (event is! KeyDownEvent || c == null) return;
-            if (event.logicalKey == LogicalKeyboardKey.select ||
-                event.logicalKey == LogicalKeyboardKey.enter ||
-                event.logicalKey == LogicalKeyboardKey.space) {
+            final tvControlsActive = isTvBuild && controls && !controlsLocked;
+            if (!tvControlsActive &&
+                (event.logicalKey == LogicalKeyboardKey.select ||
+                    event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.space)) {
               _togglePlay();
             }
-            if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+            if (!tvControlsActive &&
+                event.logicalKey == LogicalKeyboardKey.arrowRight) {
               _seekBy(const Duration(seconds: 10));
             }
-            if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            if (!tvControlsActive &&
+                event.logicalKey == LogicalKeyboardKey.arrowLeft) {
               _seekBy(const Duration(seconds: -10));
             }
-            if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            if (!tvControlsActive &&
+                event.logicalKey == LogicalKeyboardKey.arrowUp) {
               _showControls();
             }
             if (event.logicalKey == LogicalKeyboardKey.keyN) {
@@ -5980,26 +5985,49 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 if (controls && !controlsLocked)
-                  PlayerOverlay(
-                    controller: c,
-                    title: widget.movie.title,
-                    episode:
-                        '${currentServer.displayName} • ${currentEpisode.displayName}',
-                    fitLabel: fitMode.label,
-                    canPrevious: _currentEpisodeIndex > 0,
-                    canNext:
-                        _currentEpisodeIndex >= 0 &&
-                        _currentEpisodeIndex < currentServer.items.length - 1,
-                    onPlayPause: _togglePlay,
-                    onReplay: () => _seekBy(const Duration(seconds: -10)),
-                    onForward: () => _seekBy(const Duration(seconds: 10)),
-                    onPrevious: () => _playSibling(-1),
-                    onNext: () => _playSibling(1),
-                    onEpisodes: _showEpisodeSheet,
-                    onSettings: _showSettingsSheet,
-                    onFit: _cycleFitMode,
-                    onBack: isWatchTogether ? _leavePlayer : null,
-                  ),
+                  isTvBuild
+                      ? TvPlayerOverlay(
+                          controller: c,
+                          title: widget.movie.title,
+                          episode:
+                              '${currentServer.displayName} • ${currentEpisode.displayName}',
+                          fitLabel: fitMode.label,
+                          canPrevious: _currentEpisodeIndex > 0,
+                          canNext:
+                              _currentEpisodeIndex >= 0 &&
+                              _currentEpisodeIndex <
+                                  currentServer.items.length - 1,
+                          onPlayPause: _togglePlay,
+                          onReplay: () => _seekBy(const Duration(seconds: -10)),
+                          onForward: () => _seekBy(const Duration(seconds: 10)),
+                          onPrevious: () => _playSibling(-1),
+                          onNext: () => _playSibling(1),
+                          onEpisodes: _showEpisodeSheet,
+                          onSettings: _showSettingsSheet,
+                          onFit: _cycleFitMode,
+                          onBack: isWatchTogether ? _leavePlayer : null,
+                        )
+                      : PlayerOverlay(
+                          controller: c,
+                          title: widget.movie.title,
+                          episode:
+                              '${currentServer.displayName} • ${currentEpisode.displayName}',
+                          fitLabel: fitMode.label,
+                          canPrevious: _currentEpisodeIndex > 0,
+                          canNext:
+                              _currentEpisodeIndex >= 0 &&
+                              _currentEpisodeIndex <
+                                  currentServer.items.length - 1,
+                          onPlayPause: _togglePlay,
+                          onReplay: () => _seekBy(const Duration(seconds: -10)),
+                          onForward: () => _seekBy(const Duration(seconds: 10)),
+                          onPrevious: () => _playSibling(-1),
+                          onNext: () => _playSibling(1),
+                          onEpisodes: _showEpisodeSheet,
+                          onSettings: _showSettingsSheet,
+                          onFit: _cycleFitMode,
+                          onBack: isWatchTogether ? _leavePlayer : null,
+                        ),
                 if (supportsTouchLevels && controls && !controlsLocked)
                   _buildLockButton(locked: false),
                 if (supportsTouchLevels && controlsLocked)
@@ -6061,6 +6089,419 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     ),
   );
+}
+
+class TvPlayerOverlay extends StatelessWidget {
+  const TvPlayerOverlay({
+    super.key,
+    required this.controller,
+    required this.title,
+    required this.episode,
+    required this.fitLabel,
+    required this.canPrevious,
+    required this.canNext,
+    required this.onPlayPause,
+    required this.onReplay,
+    required this.onForward,
+    required this.onPrevious,
+    required this.onNext,
+    required this.onEpisodes,
+    required this.onSettings,
+    required this.onFit,
+    this.onBack,
+  });
+
+  final VideoPlayerController? controller;
+  final String title;
+  final String episode;
+  final String fitLabel;
+  final bool canPrevious;
+  final bool canNext;
+  final VoidCallback onPlayPause;
+  final VoidCallback onReplay;
+  final VoidCallback onForward;
+  final VoidCallback onPrevious;
+  final VoidCallback onNext;
+  final VoidCallback onEpisodes;
+  final VoidCallback onSettings;
+  final VoidCallback onFit;
+  final VoidCallback? onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Colors.black.withValues(alpha: .64),
+            Colors.black.withValues(alpha: .08),
+            Colors.black.withValues(alpha: .92),
+          ],
+          stops: const [0, .48, 1],
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(44, 30, 44, 38),
+          child: FocusTraversalGroup(
+            policy: OrderedTraversalPolicy(),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TvPlayerControlButton(
+                      order: 1,
+                      icon: Icons.arrow_back_rounded,
+                      label: 'Thoát',
+                      compact: true,
+                      onPressed:
+                          onBack ?? () => Navigator.of(context).maybePop(),
+                    ),
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textScaler: TextScaler.noScaling,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              height: 1.08,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            episode,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textScaler: TextScaler.noScaling,
+                            style: const TextStyle(
+                              color: CvColors.muted,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                if (c != null && c.value.isInitialized)
+                  ValueListenableBuilder<VideoPlayerValue>(
+                    valueListenable: c,
+                    builder: (context, value, _) => Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TvProgressScrubber(
+                          order: 2,
+                          value: value,
+                          onReplay: onReplay,
+                          onForward: onForward,
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  TvPlayerControlButton(
+                                    order: 3,
+                                    icon: Icons.video_library_rounded,
+                                    label: 'Tập',
+                                    onPressed: onEpisodes,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  TvPlayerControlButton(
+                                    order: 4,
+                                    icon: Icons.skip_previous_rounded,
+                                    label: 'Trước',
+                                    onPressed: canPrevious ? onPrevious : null,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  TvPlayerControlButton(
+                                    order: 5,
+                                    icon: Icons.replay_10_rounded,
+                                    label: 'Lùi 10s',
+                                    onPressed: onReplay,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  TvPlayerControlButton(
+                                    order: 6,
+                                    icon: value.isPlaying
+                                        ? Icons.pause_rounded
+                                        : Icons.play_arrow_rounded,
+                                    label: value.isPlaying
+                                        ? 'Tạm dừng'
+                                        : 'Phát',
+                                    primary: true,
+                                    autofocus: true,
+                                    onPressed: onPlayPause,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  TvPlayerControlButton(
+                                    order: 7,
+                                    icon: Icons.forward_10_rounded,
+                                    label: 'Tới 10s',
+                                    onPressed: onForward,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  TvPlayerControlButton(
+                                    order: 8,
+                                    icon: Icons.skip_next_rounded,
+                                    label: 'Sau',
+                                    onPressed: canNext ? onNext : null,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 20),
+                            TvPlayerControlButton(
+                              order: 9,
+                              icon: Icons.fit_screen_rounded,
+                              label: fitLabel,
+                              onPressed: onFit,
+                            ),
+                            const SizedBox(width: 12),
+                            TvPlayerControlButton(
+                              order: 10,
+                              icon: Icons.settings_rounded,
+                              label: 'Cài đặt',
+                              onPressed: onSettings,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class TvProgressScrubber extends StatefulWidget {
+  const TvProgressScrubber({
+    super.key,
+    required this.order,
+    required this.value,
+    required this.onReplay,
+    required this.onForward,
+  });
+
+  final double order;
+  final VideoPlayerValue value;
+  final VoidCallback onReplay;
+  final VoidCallback onForward;
+
+  @override
+  State<TvProgressScrubber> createState() => _TvProgressScrubberState();
+}
+
+class _TvProgressScrubberState extends State<TvProgressScrubber> {
+  bool focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final duration = widget.value.duration;
+    final position = widget.value.position;
+    final progress = duration.inMilliseconds <= 0
+        ? 0.0
+        : (position.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(widget.order),
+      child: Focus(
+        onFocusChange: (value) => setState(() => focused = value),
+        onKeyEvent: (_, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            widget.onReplay();
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+            widget.onForward();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+          decoration: BoxDecoration(
+            color: focused
+                ? Colors.white.withValues(alpha: .10)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: focused
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: .18),
+              width: focused ? 2 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Text(
+                    fmtDuration(position),
+                    textScaler: TextScaler.noScaling,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    fmtDuration(duration),
+                    textScaler: TextScaler.noScaling,
+                    style: const TextStyle(
+                      color: CvColors.muted,
+                      fontSize: 16,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  minHeight: focused ? 9 : 7,
+                  value: progress,
+                  color: focused ? Colors.white : CvColors.accent,
+                  backgroundColor: Colors.white.withValues(alpha: .24),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class TvPlayerControlButton extends StatefulWidget {
+  const TvPlayerControlButton({
+    super.key,
+    required this.order,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.primary = false,
+    this.compact = false,
+    this.autofocus = false,
+  });
+
+  final double order;
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool primary;
+  final bool compact;
+  final bool autofocus;
+
+  @override
+  State<TvPlayerControlButton> createState() => _TvPlayerControlButtonState();
+}
+
+class _TvPlayerControlButtonState extends State<TvPlayerControlButton> {
+  bool focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+    final size = widget.primary
+        ? 72.0
+        : widget.compact
+        ? 54.0
+        : 62.0;
+    final iconSize = widget.primary ? 42.0 : 30.0;
+    final fill = widget.primary
+        ? CvColors.accent
+        : Colors.white.withValues(alpha: focused ? .18 : .10);
+    return FocusTraversalOrder(
+      order: NumericFocusOrder(widget.order),
+      child: Focus(
+        autofocus: widget.autofocus,
+        canRequestFocus: enabled,
+        onFocusChange: (value) => setState(() => focused = value),
+        onKeyEvent: (_, event) {
+          if (!enabled || event is! KeyDownEvent) return KeyEventResult.ignored;
+          if (event.logicalKey == LogicalKeyboardKey.select ||
+              event.logicalKey == LogicalKeyboardKey.enter ||
+              event.logicalKey == LogicalKeyboardKey.space) {
+            widget.onPressed?.call();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 120),
+          curve: Curves.easeOutCubic,
+          scale: focused ? 1.10 : 1,
+          child: Tooltip(
+            message: widget.label,
+            child: Material(
+              color: enabled ? fill : Colors.white.withValues(alpha: .04),
+              borderRadius: BorderRadius.circular(999),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: widget.onPressed,
+                borderRadius: BorderRadius.circular(999),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: focused
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: .12),
+                      width: focused ? 3 : 1,
+                    ),
+                    boxShadow: focused
+                        ? [
+                            BoxShadow(
+                              color: Colors.white.withValues(alpha: .28),
+                              blurRadius: 18,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Icon(
+                    widget.icon,
+                    size: iconSize,
+                    color: enabled
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: .32),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class PlayerOverlay extends StatelessWidget {
