@@ -5209,6 +5209,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? controlsTimer;
   Timer? levelApplyTimer;
   Timer? levelSyncTimer;
+  Timer? gestureOverlayTimer;
   final focusNode = FocusNode();
   late EpisodeServer currentServer;
   late EpisodeItem currentEpisode;
@@ -5399,6 +5400,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       pendingVolume = null;
     });
     levelApplyTimer?.cancel();
+    gestureOverlayTimer?.cancel();
     if (controlsLocked) {
       controlsTimer?.cancel();
     } else {
@@ -5659,6 +5661,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _onPanStart(DragStartDetails details) {
     if (!supportsTouchLevels || controlsLocked) return;
     final c = controller;
+    gestureOverlayTimer?.cancel();
     dragStart = details.localPosition;
     dragStartPosition = c?.value.position;
     dragMode = null;
@@ -5734,10 +5737,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
       dragStartPosition = null;
       pendingSeekPosition = null;
       dragMode = null;
-      gestureMode = null;
-      gestureValue = null;
     });
+    _scheduleGestureOverlayHide();
     _showControls();
+  }
+
+  void _scheduleGestureOverlayHide() {
+    gestureOverlayTimer?.cancel();
+    gestureOverlayTimer = Timer(const Duration(milliseconds: 620), () {
+      if (!mounted) return;
+      setState(() {
+        gestureMode = null;
+        gestureValue = null;
+      });
+    });
   }
 
   void _onDoubleTapDown(TapDownDetails details) {
@@ -5872,6 +5885,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     controlsTimer?.cancel();
     levelApplyTimer?.cancel();
     levelSyncTimer?.cancel();
+    gestureOverlayTimer?.cancel();
     saveTimer?.cancel();
     if (isWatchTogether && !leavingPlayer) {
       widget.repo.closeWatchRoom(forceDelete: isWatchHost);
@@ -6503,40 +6517,170 @@ class GestureLevelHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final isBrightness = mode == 'brightness';
     final isVolume = mode == 'volume';
+    if (!isBrightness && !isVolume) {
+      return _SeekGestureHint(forward: mode == 'forward', value: value);
+    }
+
+    final level = value.clamp(0.0, 1.0);
     final icon = isBrightness
         ? Icons.brightness_6_rounded
-        : isVolume
-        ? Icons.volume_up_rounded
-        : mode == 'forward'
-        ? Icons.forward_10_rounded
-        : Icons.replay_10_rounded;
-    final label = isBrightness
-        ? 'Độ sáng'
-        : isVolume
-        ? 'Âm lượng'
-        : 'Tua';
-    return Center(
-      child: Material(
-        color: Colors.black.withValues(alpha: .72),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: Colors.white, size: 34),
-              const SizedBox(height: 8),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: 160,
-                child: LinearProgressIndicator(
-                  value: value.clamp(0.0, 1.0),
-                  color: CvColors.accent,
-                  backgroundColor: Colors.white24,
+        : level <= 0.02
+        ? Icons.volume_off_rounded
+        : level < 0.45
+        ? Icons.volume_down_rounded
+        : Icons.volume_up_rounded;
+    final activeColor = isBrightness
+        ? const Color(0xFFFFD45A)
+        : CvColors.accent;
+
+    return IgnorePointer(
+      child: AnimatedAlign(
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOutCubic,
+        alignment: isBrightness ? Alignment.centerLeft : Alignment.centerRight,
+        child: SafeArea(
+          minimum: const EdgeInsets.symmetric(horizontal: 26, vertical: 18),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: .58),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: .16),
+                    width: 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: .38),
+                      blurRadius: 26,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: SizedBox(
+                  width: 76,
+                  height: 252,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(13, 16, 13, 18),
+                    child: Column(
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 140),
+                          child: Icon(
+                            icon,
+                            key: ValueKey(icon),
+                            color: Colors.white,
+                            size: 30,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Expanded(
+                          child: _SystemLevelMeter(
+                            value: level,
+                            activeColor: activeColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SystemLevelMeter extends StatelessWidget {
+  const _SystemLevelMeter({required this.value, required this.activeColor});
+  final double value;
+  final Color activeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    const segments = 12;
+    final activeSegments = (value.clamp(0.0, 1.0) * segments).ceil();
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        for (var index = segments - 1; index >= 0; index--)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2.2),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 110),
+                curve: Curves.easeOutCubic,
+                decoration: BoxDecoration(
+                  color: index < activeSegments
+                      ? activeColor
+                      : Colors.white.withValues(alpha: .18),
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: index < activeSegments
+                      ? [
+                          BoxShadow(
+                            color: activeColor.withValues(alpha: .28),
+                            blurRadius: 10,
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _SeekGestureHint extends StatelessWidget {
+  const _SeekGestureHint({required this.forward, required this.value});
+  final bool forward;
+  final double value;
+
+  @override
+  Widget build(BuildContext context) {
+    final seconds = (value.clamp(0.0, 1.0) * 180).round();
+    return IgnorePointer(
+      child: Center(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: BackdropFilter(
+            filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: .58),
+                border: Border.all(color: Colors.white.withValues(alpha: .16)),
+              ),
+              child: SizedBox(
+                width: 112,
+                height: 112,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      forward
+                          ? Icons.forward_10_rounded
+                          : Icons.replay_10_rounded,
+                      color: Colors.white,
+                      size: 34,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${forward ? '+' : '-'}${seconds}s',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
