@@ -5236,6 +5236,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool watchChatVisible = true;
   bool applyingWatchSync = false;
   bool leavingPlayer = false;
+  double tvPlayerFocusOrder = 6;
   String? lastWatchRoomFrom;
   int lastWatchSyncSentAt = 0;
   static const brightnessChannel = MethodChannel('live.cineviet/brightness');
@@ -5420,6 +5421,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await c.seekTo(_clampPosition(c.value.position + offset, c.value.duration));
     _emitWatchSync(force: true);
     _showControls();
+  }
+
+  Duration _tvSeekStep(KeyEvent event) =>
+      Duration(seconds: event is KeyRepeatEvent ? 30 : 10);
+
+  void _rememberTvPlayerFocus(double order) {
+    if (tvPlayerFocusOrder == order) return;
+    tvPlayerFocusOrder = order;
   }
 
   void _maybeAutoNext() {
@@ -5803,6 +5812,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _showEpisodeSheet() async {
+    if (isTvBuild) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 64,
+            vertical: 42,
+          ),
+          backgroundColor: CvColors.ink,
+          child: PlayerEpisodeSheet(
+            movie: widget.movie,
+            currentServer: currentServer,
+            currentEpisode: currentEpisode,
+            onSelect: (server, episode) {
+              Navigator.of(context).pop();
+              _switchTo(server, episode);
+            },
+          ),
+        ),
+      );
+      _showControls();
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: CvColors.ink,
@@ -5823,6 +5855,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _showSettingsSheet() async {
     const speeds = <double>[0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+    if (isTvBuild) {
+      await showDialog<void>(
+        context: context,
+        builder: (_) => StatefulBuilder(
+          builder: (context, setPanelState) => TvPlayerSettingsPanel(
+            autoNextEpisode: autoNextEpisode,
+            playbackSpeed: playbackSpeed,
+            speeds: speeds,
+            formatSpeed: _formatSpeed,
+            onAutoNextChanged: (value) {
+              setState(() => autoNextEpisode = value);
+              setPanelState(() {});
+            },
+            onSpeedSelected: (speed) async {
+              await _setPlaybackSpeed(speed);
+              setPanelState(() {});
+            },
+          ),
+        ),
+      );
+      _showControls();
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: CvColors.ink,
@@ -5920,9 +5975,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         body: KeyboardListener(
           focusNode: focusNode,
           onKeyEvent: (event) {
-            if (event is! KeyDownEvent || c == null) return;
+            if (event is! KeyDownEvent && event is! KeyRepeatEvent) return;
+            if (c == null) return;
             final tvControlsActive = isTvBuild && controls && !controlsLocked;
-            if (!tvControlsActive &&
+            if (event is KeyDownEvent &&
+                !tvControlsActive &&
                 (event.logicalKey == LogicalKeyboardKey.select ||
                     event.logicalKey == LogicalKeyboardKey.enter ||
                     event.logicalKey == LogicalKeyboardKey.space)) {
@@ -5930,11 +5987,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
             }
             if (!tvControlsActive &&
                 event.logicalKey == LogicalKeyboardKey.arrowRight) {
-              _seekBy(const Duration(seconds: 10));
+              _seekBy(_tvSeekStep(event));
             }
             if (!tvControlsActive &&
                 event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-              _seekBy(const Duration(seconds: -10));
+              _seekBy(-_tvSeekStep(event));
             }
             if (!tvControlsActive &&
                 event.logicalKey == LogicalKeyboardKey.arrowUp) {
@@ -5997,6 +6054,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               _currentEpisodeIndex >= 0 &&
                               _currentEpisodeIndex <
                                   currentServer.items.length - 1,
+                          focusedOrder: tvPlayerFocusOrder,
                           onPlayPause: _togglePlay,
                           onReplay: () => _seekBy(const Duration(seconds: -10)),
                           onForward: () => _seekBy(const Duration(seconds: 10)),
@@ -6005,6 +6063,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           onEpisodes: _showEpisodeSheet,
                           onSettings: _showSettingsSheet,
                           onFit: _cycleFitMode,
+                          onFocusOrderChanged: _rememberTvPlayerFocus,
                           onBack: isWatchTogether ? _leavePlayer : null,
                         )
                       : PlayerOverlay(
@@ -6100,6 +6159,7 @@ class TvPlayerOverlay extends StatelessWidget {
     required this.fitLabel,
     required this.canPrevious,
     required this.canNext,
+    required this.focusedOrder,
     required this.onPlayPause,
     required this.onReplay,
     required this.onForward,
@@ -6108,6 +6168,7 @@ class TvPlayerOverlay extends StatelessWidget {
     required this.onEpisodes,
     required this.onSettings,
     required this.onFit,
+    required this.onFocusOrderChanged,
     this.onBack,
   });
 
@@ -6117,6 +6178,7 @@ class TvPlayerOverlay extends StatelessWidget {
   final String fitLabel;
   final bool canPrevious;
   final bool canNext;
+  final double focusedOrder;
   final VoidCallback onPlayPause;
   final VoidCallback onReplay;
   final VoidCallback onForward;
@@ -6125,166 +6187,200 @@ class TvPlayerOverlay extends StatelessWidget {
   final VoidCallback onEpisodes;
   final VoidCallback onSettings;
   final VoidCallback onFit;
+  final ValueChanged<double> onFocusOrderChanged;
   final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withValues(alpha: .64),
-            Colors.black.withValues(alpha: .08),
-            Colors.black.withValues(alpha: .92),
-          ],
-          stops: const [0, .48, 1],
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      builder: (context, value, child) => Opacity(
+        opacity: value,
+        child: Transform.translate(
+          offset: Offset(0, (1 - value) * 18),
+          child: child,
         ),
       ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(44, 30, 44, 38),
-          child: FocusTraversalGroup(
-            policy: OrderedTraversalPolicy(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TvPlayerControlButton(
-                      order: 1,
-                      icon: Icons.arrow_back_rounded,
-                      label: 'Thoát',
-                      compact: true,
-                      onPressed:
-                          onBack ?? () => Navigator.of(context).maybePop(),
-                    ),
-                    const SizedBox(width: 18),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.black.withValues(alpha: .64),
+              Colors.black.withValues(alpha: .08),
+              Colors.black.withValues(alpha: .92),
+            ],
+            stops: const [0, .48, 1],
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(44, 30, 44, 38),
+            child: FocusTraversalGroup(
+              policy: OrderedTraversalPolicy(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TvPlayerControlButton(
+                        order: 1,
+                        icon: Icons.arrow_back_rounded,
+                        label: 'Thoát',
+                        compact: true,
+                        autofocus: focusedOrder == 1,
+                        onFocused: () => onFocusOrderChanged(1),
+                        onPressed:
+                            onBack ?? () => Navigator.of(context).maybePop(),
+                      ),
+                      const SizedBox(width: 18),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textScaler: TextScaler.noScaling,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w900,
+                                height: 1.08,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              episode,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textScaler: TextScaler.noScaling,
+                              style: const TextStyle(
+                                color: CvColors.muted,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  if (c != null && c.value.isInitialized)
+                    ValueListenableBuilder<VideoPlayerValue>(
+                      valueListenable: c,
+                      builder: (context, value, _) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textScaler: TextScaler.noScaling,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                              height: 1.08,
-                            ),
+                          TvProgressScrubber(
+                            order: 2,
+                            value: value,
+                            onReplay: onReplay,
+                            onForward: onForward,
+                            autofocus: focusedOrder == 2,
+                            onFocused: () => onFocusOrderChanged(2),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            episode,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textScaler: TextScaler.noScaling,
-                            style: const TextStyle(
-                              color: CvColors.muted,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    TvPlayerControlButton(
+                                      order: 3,
+                                      icon: Icons.video_library_rounded,
+                                      label: 'Tập',
+                                      autofocus: focusedOrder == 3,
+                                      onFocused: () => onFocusOrderChanged(3),
+                                      onPressed: onEpisodes,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    TvPlayerControlButton(
+                                      order: 4,
+                                      icon: Icons.skip_previous_rounded,
+                                      label: 'Trước',
+                                      autofocus: focusedOrder == 4,
+                                      onFocused: () => onFocusOrderChanged(4),
+                                      onPressed: canPrevious
+                                          ? onPrevious
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    TvPlayerControlButton(
+                                      order: 5,
+                                      icon: Icons.replay_10_rounded,
+                                      label: 'Lùi 10s',
+                                      autofocus: focusedOrder == 5,
+                                      onFocused: () => onFocusOrderChanged(5),
+                                      onPressed: onReplay,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    TvPlayerControlButton(
+                                      order: 6,
+                                      icon: value.isPlaying
+                                          ? Icons.pause_rounded
+                                          : Icons.play_arrow_rounded,
+                                      label: value.isPlaying
+                                          ? 'Tạm dừng'
+                                          : 'Phát',
+                                      primary: true,
+                                      autofocus: focusedOrder == 6,
+                                      onFocused: () => onFocusOrderChanged(6),
+                                      onPressed: onPlayPause,
+                                    ),
+                                    const SizedBox(width: 14),
+                                    TvPlayerControlButton(
+                                      order: 7,
+                                      icon: Icons.forward_10_rounded,
+                                      label: 'Tới 10s',
+                                      autofocus: focusedOrder == 7,
+                                      onFocused: () => onFocusOrderChanged(7),
+                                      onPressed: onForward,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    TvPlayerControlButton(
+                                      order: 8,
+                                      icon: Icons.skip_next_rounded,
+                                      label: 'Sau',
+                                      autofocus: focusedOrder == 8,
+                                      onFocused: () => onFocusOrderChanged(8),
+                                      onPressed: canNext ? onNext : null,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 20),
+                              TvPlayerControlButton(
+                                order: 9,
+                                icon: Icons.fit_screen_rounded,
+                                label: fitLabel,
+                                autofocus: focusedOrder == 9,
+                                onFocused: () => onFocusOrderChanged(9),
+                                onPressed: onFit,
+                              ),
+                              const SizedBox(width: 12),
+                              TvPlayerControlButton(
+                                order: 10,
+                                icon: Icons.settings_rounded,
+                                label: 'Cài đặt',
+                                autofocus: focusedOrder == 10,
+                                onFocused: () => onFocusOrderChanged(10),
+                                onPressed: onSettings,
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                  ],
-                ),
-                const Spacer(),
-                if (c != null && c.value.isInitialized)
-                  ValueListenableBuilder<VideoPlayerValue>(
-                    valueListenable: c,
-                    builder: (context, value, _) => Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TvProgressScrubber(
-                          order: 2,
-                          value: value,
-                          onReplay: onReplay,
-                          onForward: onForward,
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  TvPlayerControlButton(
-                                    order: 3,
-                                    icon: Icons.video_library_rounded,
-                                    label: 'Tập',
-                                    onPressed: onEpisodes,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  TvPlayerControlButton(
-                                    order: 4,
-                                    icon: Icons.skip_previous_rounded,
-                                    label: 'Trước',
-                                    onPressed: canPrevious ? onPrevious : null,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  TvPlayerControlButton(
-                                    order: 5,
-                                    icon: Icons.replay_10_rounded,
-                                    label: 'Lùi 10s',
-                                    onPressed: onReplay,
-                                  ),
-                                  const SizedBox(width: 14),
-                                  TvPlayerControlButton(
-                                    order: 6,
-                                    icon: value.isPlaying
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
-                                    label: value.isPlaying
-                                        ? 'Tạm dừng'
-                                        : 'Phát',
-                                    primary: true,
-                                    autofocus: true,
-                                    onPressed: onPlayPause,
-                                  ),
-                                  const SizedBox(width: 14),
-                                  TvPlayerControlButton(
-                                    order: 7,
-                                    icon: Icons.forward_10_rounded,
-                                    label: 'Tới 10s',
-                                    onPressed: onForward,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  TvPlayerControlButton(
-                                    order: 8,
-                                    icon: Icons.skip_next_rounded,
-                                    label: 'Sau',
-                                    onPressed: canNext ? onNext : null,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            TvPlayerControlButton(
-                              order: 9,
-                              icon: Icons.fit_screen_rounded,
-                              label: fitLabel,
-                              onPressed: onFit,
-                            ),
-                            const SizedBox(width: 12),
-                            TvPlayerControlButton(
-                              order: 10,
-                              icon: Icons.settings_rounded,
-                              label: 'Cài đặt',
-                              onPressed: onSettings,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -6300,12 +6396,16 @@ class TvProgressScrubber extends StatefulWidget {
     required this.value,
     required this.onReplay,
     required this.onForward,
+    required this.autofocus,
+    required this.onFocused,
   });
 
   final double order;
   final VideoPlayerValue value;
   final VoidCallback onReplay;
   final VoidCallback onForward;
+  final bool autofocus;
+  final VoidCallback onFocused;
 
   @override
   State<TvProgressScrubber> createState() => _TvProgressScrubberState();
@@ -6324,15 +6424,26 @@ class _TvProgressScrubberState extends State<TvProgressScrubber> {
     return FocusTraversalOrder(
       order: NumericFocusOrder(widget.order),
       child: Focus(
-        onFocusChange: (value) => setState(() => focused = value),
+        autofocus: widget.autofocus,
+        onFocusChange: (value) {
+          setState(() => focused = value);
+          if (value) widget.onFocused();
+        },
         onKeyEvent: (_, event) {
-          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+            return KeyEventResult.ignored;
+          }
+          final repeatCount = event is KeyRepeatEvent ? 3 : 1;
           if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-            widget.onReplay();
+            for (var i = 0; i < repeatCount; i++) {
+              widget.onReplay();
+            }
             return KeyEventResult.handled;
           }
           if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-            widget.onForward();
+            for (var i = 0; i < repeatCount; i++) {
+              widget.onForward();
+            }
             return KeyEventResult.handled;
           }
           return KeyEventResult.ignored;
@@ -6407,6 +6518,7 @@ class TvPlayerControlButton extends StatefulWidget {
     this.primary = false,
     this.compact = false,
     this.autofocus = false,
+    this.onFocused,
   });
 
   final double order;
@@ -6416,6 +6528,7 @@ class TvPlayerControlButton extends StatefulWidget {
   final bool primary;
   final bool compact;
   final bool autofocus;
+  final VoidCallback? onFocused;
 
   @override
   State<TvPlayerControlButton> createState() => _TvPlayerControlButtonState();
@@ -6441,7 +6554,10 @@ class _TvPlayerControlButtonState extends State<TvPlayerControlButton> {
       child: Focus(
         autofocus: widget.autofocus,
         canRequestFocus: enabled,
-        onFocusChange: (value) => setState(() => focused = value),
+        onFocusChange: (value) {
+          setState(() => focused = value);
+          if (value) widget.onFocused?.call();
+        },
         onKeyEvent: (_, event) {
           if (!enabled || event is! KeyDownEvent) return KeyEventResult.ignored;
           if (event.logicalKey == LogicalKeyboardKey.select ||
@@ -6706,6 +6822,139 @@ class PlayerControlButton extends StatelessWidget {
     return Tooltip(
       message: label,
       child: IconButton(onPressed: onPressed, icon: Icon(icon)),
+    );
+  }
+}
+
+class TvPlayerSettingsPanel extends StatelessWidget {
+  const TvPlayerSettingsPanel({
+    super.key,
+    required this.autoNextEpisode,
+    required this.playbackSpeed,
+    required this.speeds,
+    required this.formatSpeed,
+    required this.onAutoNextChanged,
+    required this.onSpeedSelected,
+  });
+
+  final bool autoNextEpisode;
+  final double playbackSpeed;
+  final List<double> speeds;
+  final String Function(double value) formatSpeed;
+  final ValueChanged<bool> onAutoNextChanged;
+  final Future<void> Function(double speed) onSpeedSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 72, vertical: 54),
+      backgroundColor: CvColors.ink,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 760,
+          maxHeight: size.height * .78,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 28),
+          child: FocusTraversalGroup(
+            policy: OrderedTraversalPolicy(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(child: SectionTitle('Cài đặt player')),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close_rounded),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                FocusTraversalOrder(
+                  order: const NumericFocusOrder(1),
+                  child: FocusButton(
+                    selected: autoNextEpisode,
+                    onPressed: () => onAutoNextChanged(!autoNextEpisode),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            autoNextEpisode
+                                ? Icons.playlist_play_rounded
+                                : Icons.playlist_remove_rounded,
+                            color: autoNextEpisode ? CvColors.accent : null,
+                            size: 30,
+                          ),
+                          const SizedBox(width: 14),
+                          const Expanded(
+                            child: Text(
+                              'Tự chuyển tập',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                              ),
+                            ),
+                          ),
+                          Switch(
+                            value: autoNextEpisode,
+                            onChanged: onAutoNextChanged,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                const Text(
+                  'Tốc độ phát',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (var i = 0; i < speeds.length; i++)
+                      FocusTraversalOrder(
+                        order: NumericFocusOrder(2 + i.toDouble()),
+                        child: SizedBox(
+                          width: 128,
+                          height: 58,
+                          child: FocusButton(
+                            selected: playbackSpeed == speeds[i],
+                            onPressed: () =>
+                                unawaited(onSpeedSelected(speeds[i])),
+                            child: Center(
+                              child: Text(
+                                speeds[i] == 1.0
+                                    ? '1x'
+                                    : formatSpeed(speeds[i]),
+                                textScaler: TextScaler.noScaling,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  color: playbackSpeed == speeds[i]
+                                      ? Colors.white
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -7215,8 +7464,8 @@ class _PlayerEpisodeSheetState extends State<PlayerEpisodeSheet> {
         ? 5
         : 3;
     final maxHeight = (MediaQuery.sizeOf(context).height * .86).clamp(
-      260.0,
-      620.0,
+      isTvBuild ? 420.0 : 260.0,
+      isTvBuild ? 760.0 : 620.0,
     );
     return SafeArea(
       child: ConstrainedBox(
